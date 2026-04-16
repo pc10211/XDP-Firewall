@@ -15,6 +15,8 @@ Welcome to the XDP-Firewall repository. This project leverages the power of eBPF
 * **Seamless Backend Integration:** The `backend.py` script bridges the high-speed kernel space with the user-friendly web interface.
 * **Automated Setup:** Get up and running in minutes with the included `install.sh` script.
 
+<img width="1905" height="963" alt="grafik" src="https://github.com/user-attachments/assets/3274c0c6-189c-47e8-beb2-58b437cfce15" />
+
 ---
 
 ## 🚀 Setup & Installation
