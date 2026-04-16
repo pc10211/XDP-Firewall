@@ -1,4 +1,4 @@
-# XDP-Firewall
+# XDP-Firewall 1.1v
 
 > Next-gen XDP Firewall: High-performance packet filtering with an intuitive web panel and built-in rate limiting.
 
