@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>XDP Firewall · Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+:root{
+  --bg:#0e1117;--surf:#161b27;--card:#1d2236;--hover:#232840;
+  --b1:#2a3152;--b2:#344070;--text:#dde4f5;--muted:#7d8db0;--dim:#3e4d70;
+  --green:#2dd4a0;--red:#f05252;--blue:#5b9bf8;
+  --ui:'DM Sans',system-ui,sans-serif;--mono:'Fira Code',monospace;
+}
+body{font-family:var(--ui);background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
+.wrap{width:380px;padding:24px}
+.logo{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--muted);margin-bottom:22px;text-align:center;letter-spacing:.04em}
+.logo b{color:var(--blue)}
+.box{background:var(--card);border:1px solid var(--b1);border-radius:10px;padding:28px}
+h1{font-size:17px;font-weight:500;margin-bottom:20px}
+h1 span{color:var(--blue)}
+.fg{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.fl{font-size:11px;color:var(--muted);letter-spacing:.03em}
+input{width:100%;padding:11px 13px;background:var(--surf);border:1px solid var(--b2);color:var(--text);border-radius:6px;font-size:14px;font-family:var(--mono);outline:none;transition:border-color .14s}
+input:focus{border-color:var(--blue)}
+button{width:100%;padding:11px;margin-top:6px;background:var(--blue);color:#fff;border:1px solid var(--blue);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;font-family:var(--ui);transition:all .14s}
+button:hover{background:#4a88e8;box-shadow:0 0 18px rgba(91,155,248,.3)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.err{color:var(--red);font-size:12px;margin-top:12px;min-height:18px;text-align:center;font-family:var(--mono)}
+.hint{margin-top:18px;padding-top:18px;border-top:1px solid var(--b1);font-size:11px;color:var(--dim);line-height:1.6;text-align:center}
+.hint code{font-family:var(--mono);color:var(--muted);background:var(--surf);padding:1px 5px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="logo">&lt; <b>XDP</b> FIREWALL /&gt;</div>
+<div class="box">
+<h1>Anmelden <span>·</span> <span style="color:var(--muted);font-size:13px">v5.1</span></h1>
+<form id="f" onsubmit="doLogin(event)">
+<div class="fg">
+<div class="fl">API-Key / Passwort</div>
+<input id="pw" type="password" autofocus autocomplete="current-password" spellcheck="false">
+</div>
+<button type="submit" id="sb">Anmelden</button>
+<div class="err" id="e"></div>
+</form>
+<div class="hint">Der API-Key befindet sich in <code>/opt/xdp-firewall/api_key.txt</code></div>
+</div>
+</div>
+<script>
+async function doLogin(e){
+  e.preventDefault();
+  var pw=document.getElementById('pw').value;
+  var err=document.getElementById('e');
+  var sb=document.getElementById('sb');
+  err.textContent='';
+  if(!pw){err.textContent='Passwort erforderlich';return}
+  sb.disabled=true;sb.textContent='Prüfe...';
+  try{
+    var r=await fetch('/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({password:pw})
+    });
+    if(r.ok){location.href='/';return}
+    var j=await r.json().catch(function(){return{detail:'Fehler'}});
+    err.textContent=j.detail||'Fehler';
+  }catch(ex){
+    err.textContent='Netzwerk-Fehler';
+  }finally{
+    sb.disabled=false;sb.textContent='Anmelden';
+  }
+}
+</script>
+</body>
+</html>

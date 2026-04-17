@@ -1,3 +1,4 @@
+<!doctype html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
@@ -53,6 +54,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--text);display:flex;f
 .pp{font-family:var(--mono);font-size:11px}
 .sf{margin-top:auto;padding:10px 14px;border-top:1px solid var(--b1)}
 .sf span{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.9}
+.sf button{margin-top:8px;width:100%;padding:5px;background:transparent;border:1px solid var(--b2);color:var(--muted);border-radius:4px;font-size:10px;cursor:pointer;font-family:var(--ui);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.sf button:hover{color:var(--red);border-color:var(--red)}
 #main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:13px;min-width:0}
 .sec{display:flex;flex-direction:column;gap:13px}
 .mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:11px}
@@ -152,13 +155,16 @@ body{font-family:var(--ui);background:var(--bg);color:var(--text);display:flex;f
 .icon-btn svg{width:12px;height:12px}
 .filter-bar input{background:var(--card);border:1px solid var(--b2);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 8px;width:180px;outline:none}
 .filter-bar input:focus{border-color:var(--blue)}
+.ipv6-bar{background:var(--card);border:1px solid var(--b1);border-radius:7px;padding:11px 15px;display:flex;align-items:center;gap:12px;font-size:12px}
+.ipv6-bar .lbl{color:var(--muted);font-weight:500}
+.ipv6-bar .val{font-family:var(--mono);font-size:11px;color:var(--dim)}
 </style>
 </head>
 <body>
 <div id="topbar">
   <div class="logo">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-    Firewall L2/3/4<span style="color:var(--dim);font-size:11px;margin-left:2px">v1.1</span>
+    Firewall L2/3/4<span style="color:var(--dim);font-size:11px;margin-left:2px">v1.3</span>
   </div>
   <div class="divv"></div>
   <div id="sbadge" class="sbadge off"><div id="sdot" class="dot r"></div><span id="stxt">OFFLINE</span></div>
@@ -193,10 +199,18 @@ body{font-family:var(--ui);background:var(--bg);color:var(--text);display:flex;f
     <span>Gemacht von @Valentino</span>
     <span>XDP + TC Conntrack</span>
     <span>Kernel 4.18+ / BCC</span>
+    <button onclick="doLogout()">Abmelden</button>
   </div>
 </div>
 <div id="main">
   <div id="s-dash" class="sec">
+    <div class="ipv6-bar">
+      <span class="lbl">IPv6-Policy:</span>
+      <label class="toggle"><input type="checkbox" id="ipv6-toggle" onchange="toggleIPv6()"><span></span></label>
+      <span class="val" id="ipv6-status">Blockiert</span>
+      <span style="flex:1"></span>
+      <span class="val">Default: IPv6 wird gedroppt</span>
+    </div>
     <div class="mg">
       <div class="mc cb"><div class="ml">Gesamt PPS</div><div class="mv" id="m-total">0</div><div class="sw"><canvas id="sp-total"></canvas></div></div>
       <div class="mc cg"><div class="ml">Erlaubt PPS</div><div class="mv" id="m-pass">0</div><div class="sw"><canvas id="sp-pass"></canvas></div></div>
@@ -260,7 +274,7 @@ body{font-family:var(--ui);background:var(--bg);color:var(--text);display:flex;f
 </div>
 <script>
 var API='/api',allRules=[],editId=null,mType='filter',mAction='allow',mDir='inbound'
-var _origFetch=window.fetch;window.fetch=function(url,opts){opts=opts||{};opts.headers=opts.headers||{};if(typeof opts.headers.set==='function'){opts.headers.set('x-api-key',API_KEY||'')}else{opts.headers['x-api-key']=API_KEY||''};return _origFetch(url,opts)}
+var _origFetch=window.fetch;window.fetch=function(url,opts){opts=opts||{};opts.credentials='include';opts.headers=opts.headers||{};return _origFetch(url,opts).then(function(r){if(r.status===401){location.href='/login';throw new Error('Nicht autorisiert')}return r})}
 var spd={total:Array(60).fill(0),pass:Array(60).fill(0),drop:Array(60).fill(0)}
 var TYPES=[{key:'filter',label:'FILTER'},{key:'ratelimit',label:'RATE LIMIT'},{key:'ip_ratelimit',label:'IP RATE LIMIT'},{key:'forward',label:'FORWARD'},{key:'dns',label:'DNS'},{key:'established',label:'CONNTRACK'},{key:'conn_timeout',label:'CONN TIMEOUT'}]
 function toast(m,t){var el=document.getElementById('toast');el.textContent=m;el.className='show '+(t||'ok');clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove('show')},3000)}
@@ -301,12 +315,14 @@ function quickConnTimeout(s){postRule({type:'conn_timeout',value:s,comment:'Time
 function postRule(body){fetch(API+'/rules',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.detail)});return r.json()}).then(function(){log('+ '+(body.comment||body.type),'lok');toast((body.comment||body.type)+' hinzugefügt','ok');loadRules()}).catch(function(e){toast(e.message,'err')})}
 function applyRules(){var iface=document.getElementById('iface-in').value.trim()||'eth0';log('Kompiliere für '+iface+'...','linf');toast('Kompiliere...','ok');fetch(API+'/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({iface:iface})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.detail);return j})}).then(function(j){log(j.message,'lok');toast(j.message,'ok')}).catch(function(e){log('Fehler: '+e.message,'lerr');toast(e.message,'err')})}
 function detach(){fetch(API+'/detach',{method:'POST'}).then(function(r){return r.json()}).then(function(j){log(j.message,'ldim');toast(j.message,'ok')}).catch(function(e){toast(e.message,'err')})}
-function connectSSE(){var es=new EventSource(API+'/stream?key='+(API_KEY||''));es.onmessage=function(e){try{updateStats(JSON.parse(e.data))}catch(ex){}};es.onerror=function(){setTimeout(connectSSE,3000);es.close()}}
-function updateStats(d){document.getElementById('m-total').textContent=d.total_pps;document.getElementById('m-pass').textContent=d.pass_pps;document.getElementById('m-drop').textContent=d.drop_pps;document.getElementById('m-rl').textContent=d.rl_dropped||0;document.getElementById('m-ct').textContent=(d.ct_passed||0).toLocaleString();document.getElementById('m-rules').textContent=d.rules||0;document.getElementById('s-passed').textContent=(d.passed||0).toLocaleString();document.getElementById('s-dropped').textContent=(d.dropped||0).toLocaleString();document.getElementById('s-bl').textContent=(d.bl_dropped||0).toLocaleString();document.getElementById('s-icmp').textContent=(d.icmp_dropped||0).toLocaleString();document.getElementById('s-ct-passed').textContent=(d.ct_passed||0).toLocaleString();document.getElementById('s-ct-tracked').textContent=(d.ct_tracked||0).toLocaleString();document.getElementById('s-out').textContent=(d.out_dropped||0).toLocaleString();var badge=document.getElementById('sbadge'),dot=document.getElementById('sdot'),stxt=document.getElementById('stxt'),iface=document.getElementById('siface'),tcb=document.getElementById('tc-badge'),tct=document.getElementById('tc-txt');if(d.loaded){badge.className='sbadge on';dot.className='dot g';stxt.textContent='ONLINE';iface.textContent=d.iface||''}else{badge.className='sbadge off';dot.className='dot r';stxt.textContent='OFFLINE';iface.textContent=''};if(d.tc_active){tcb.style.display='inline-flex';tcb.className='sbadge on';tct.textContent='CT'}else{tcb.style.display=d.loaded?'inline-flex':'none';tcb.className='sbadge off';tct.textContent='CT'};spd.total.shift();spd.total.push(d.total_pps||0);spd.pass.shift();spd.pass.push(d.pass_pps||0);spd.drop.shift();spd.drop.push(d.drop_pps||0);redraw()}
+function toggleIPv6(){var allow=document.getElementById('ipv6-toggle').checked;fetch(API+'/ipv6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({allow:allow})}).then(function(r){return r.json()}).then(function(j){document.getElementById('ipv6-status').textContent=j.ipv6_allow?'Erlaubt':'Blockiert';toast('IPv6 '+(j.ipv6_allow?'erlaubt':'blockiert'),'ok')}).catch(function(e){toast(e.message,'err')})}
+function doLogout(){fetch(API+'/logout',{method:'POST'}).then(function(){location.href='/login'}).catch(function(){location.href='/login'})}
+function connectSSE(){var es=new EventSource(API+'/stream');es.onmessage=function(e){try{updateStats(JSON.parse(e.data))}catch(ex){}};es.onerror=function(){es.close();setTimeout(connectSSE,3000)}}
+function updateStats(d){document.getElementById('m-total').textContent=d.total_pps;document.getElementById('m-pass').textContent=d.pass_pps;document.getElementById('m-drop').textContent=d.drop_pps;document.getElementById('m-rl').textContent=d.rl_dropped||0;document.getElementById('m-ct').textContent=(d.ct_passed||0).toLocaleString();document.getElementById('m-rules').textContent=d.rules||0;document.getElementById('s-passed').textContent=(d.passed||0).toLocaleString();document.getElementById('s-dropped').textContent=(d.dropped||0).toLocaleString();document.getElementById('s-bl').textContent=(d.bl_dropped||0).toLocaleString();document.getElementById('s-icmp').textContent=(d.icmp_dropped||0).toLocaleString();document.getElementById('s-ct-passed').textContent=(d.ct_passed||0).toLocaleString();document.getElementById('s-ct-tracked').textContent=(d.ct_tracked||0).toLocaleString();document.getElementById('s-out').textContent=(d.out_dropped||0).toLocaleString();var badge=document.getElementById('sbadge'),dot=document.getElementById('sdot'),stxt=document.getElementById('stxt'),iface=document.getElementById('siface'),tcb=document.getElementById('tc-badge'),tct=document.getElementById('tc-txt');if(d.loaded){badge.className='sbadge on';dot.className='dot g';stxt.textContent='ONLINE';iface.textContent=d.iface||''}else{badge.className='sbadge off';dot.className='dot r';stxt.textContent='OFFLINE';iface.textContent=''};if(d.tc_active){tcb.style.display='inline-flex';tcb.className='sbadge on';tct.textContent='CT'}else{tcb.style.display=d.loaded?'inline-flex':'none';tcb.className='sbadge off';tct.textContent='CT'};if(typeof d.ipv6_allow!=='undefined'){document.getElementById('ipv6-toggle').checked=!!d.ipv6_allow;document.getElementById('ipv6-status').textContent=d.ipv6_allow?'Erlaubt':'Blockiert'};spd.total.shift();spd.total.push(d.total_pps||0);spd.pass.shift();spd.pass.push(d.pass_pps||0);spd.drop.shift();spd.drop.push(d.drop_pps||0);redraw()}
 function redraw(){drawSparkline('sp-total',spd.total,getComputedStyle(document.documentElement).getPropertyValue('--blue').trim());drawSparkline('sp-pass',spd.pass,getComputedStyle(document.documentElement).getPropertyValue('--green').trim());drawSparkline('sp-drop',spd.drop,getComputedStyle(document.documentElement).getPropertyValue('--red').trim())}
 function drawSparkline(id,data,color){var c=document.getElementById(id);if(!c)return;var W=c.offsetWidth,H=c.offsetHeight;if(!W||!H)return;c.width=W;c.height=H;var ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);var mx=Math.max.apply(null,data)||1;ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=1.5;data.forEach(function(v,i){var x=(i/(data.length-1))*W,y=H-(v/mx)*H;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke();var grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,color.replace(')',',.18)').replace('rgb','rgba'));grad.addColorStop(1,'transparent');ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fillStyle=grad;ctx.fill()}
 ;(function(){var tg=document.getElementById('type-toggle');TYPES.forEach(function(t){var b=document.createElement('button');b.className='tb'+(t.key==='filter'?' ac':'');b.setAttribute('data-type',t.key);b.textContent=t.label;b.onclick=function(){setModalType(t.key)};tg.appendChild(b)})})()
-loadRules();connectSSE();setInterval(loadRules,5000);log('XDP Firewall v5.0 + TC-Conntrack + Auth bereit','lok')
+loadRules();connectSSE();setInterval(loadRules,5000);log('XDP Firewall v5.1 + TC-Conntrack + Session-Auth + TLS bereit','lok')
 var initHash=location.hash.replace('#','');if(['dash','rules','log'].indexOf(initHash)!==-1){show(initHash)}
 window.addEventListener('hashchange',function(){var h=location.hash.replace('#','');if(['dash','rules','log'].indexOf(h)!==-1)show(h)})
 </script>
