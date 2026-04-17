@@ -245,35 +245,11 @@ int tc_egress(struct __sk_buff *skb) {
 
     __u8 proto = ip->protocol;
     void *l4   = (void *)ip + (ip->ihl * 4);
-    __u32 dst_be = ip->daddr;
-    __u16 dport = 0;
-
-    if (proto == IPPROTO_TCP) {
-        struct tcphdr *tcp = l4;
-        if ((void *)(tcp + 1) > data_end) return TC_ACT_OK;
-        dport = __be16_to_cpu(tcp->dest);
-    } else if (proto == IPPROTO_UDP) {
-        struct udphdr *udp = l4;
-        if ((void *)(udp + 1) > data_end) return TC_ACT_OK;
-        dport = __be16_to_cpu(udp->dest);
-    }
-
-    {
-        struct lpm_key bk = { .prefixlen = 32, .addr = dst_be };
-        if (bl_out_subnet.lookup(&bk)) { inc(7); return TC_ACT_SHOT; }
-    }
-
-    if (dport != 0) {
-        __u32 pk = ((__u32)proto << 16) | dport;
-        __u32 pw = (__u32)dport;
-        if (bl_out_port.lookup(&pk) || bl_out_port.lookup(&pw)) { inc(7); return TC_ACT_SHOT; }
-    }
 
     struct ct_key key = {};
     key.local_ip  = ip->saddr;
     key.remote_ip = ip->daddr;
     key.proto     = proto;
-
     __u8 new_state = CT_NEW;
 
     if (proto == IPPROTO_TCP) {
@@ -281,17 +257,15 @@ int tc_egress(struct __sk_buff *skb) {
         if ((void *)(tcp + 1) > data_end) return TC_ACT_OK;
         key.local_port  = tcp->source;
         key.remote_port = tcp->dest;
-        if (tcp->syn && !tcp->ack) {
-            new_state = CT_NEW;
-        } else {
-            new_state = CT_EST;
-        }
+        if (tcp->syn && tcp->ack) new_state = CT_EST;
+        else if (tcp->ack && !tcp->syn) new_state = CT_EST;
+        else new_state = CT_NEW;
     } else if (proto == IPPROTO_UDP) {
         struct udphdr *udp = l4;
         if ((void *)(udp + 1) > data_end) return TC_ACT_OK;
         key.local_port  = udp->source;
         key.remote_port = udp->dest;
-        new_state = CT_EST;
+        new_state = CT_NEW;
     } else if (proto == IPPROTO_ICMP) {
         struct icmphdr *icmp = l4;
         if ((void *)(icmp + 1) > data_end) return TC_ACT_OK;
