@@ -14,8 +14,9 @@ Welcome to the XDP-Firewall repository. This project leverages the power of eBPF
 * **Dynamic Rule Engine:** Easily update blocklists, allowlists, and port rules via the `rules.json` file without needing to recompile the kernel code.
 * **Seamless Backend Integration:** The `backend.py` script bridges the high-speed kernel space with the user-friendly web interface.
 * **Automated Setup:** Get up and running in minutes with the included `install.sh` script.
+<img width="900" height="990" alt="grafik" src="https://github.com/user-attachments/assets/d3feb273-67d5-47cb-935c-cfa5efb402d3" /><img width="748" height="358" alt="grafik" src="https://github.com/user-attachments/assets/7bb5038b-863f-471b-aa47-741a75bcadb0" />
 
-<img width="1905" height="963" alt="grafik" src="https://github.com/user-attachments/assets/3274c0c6-189c-47e8-beb2-58b437cfce15" />
+
 
 ---
 
