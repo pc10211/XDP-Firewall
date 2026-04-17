@@ -1,4 +1,4 @@
-# 🛡️ XDP-Firewall v5.1
+# 🛡️ XDP-Firewall v1.3
 
 > **Enterprise-Grade eBPF/XDP Firewall**: Ultra-low latency kernel-level packet filtering with stateful connection tracking, advanced rate limiting, and an intuitive web management console.
 
@@ -37,7 +37,7 @@ A high-performance Python backend (`backend.py`) powered by **FastAPI** and **BC
 
 ---
 
-## 🖼️ Dashboard Preview it can easy block 2m+ pps whit 1 singel server 700k pps on a 4 core mini server 26% cpu load:
+## 🖼️ Dashboard Preview it can easy block 4m+ pps whit 1 singel server 700k pps on a 4 core mini server 29% cpu load:
 
 <div align="center">
   <img width="800" alt="Dashboard Main View" src="https://github.com/user-attachments/assets/d3feb273-67d5-47cb-935c-cfa5efb402d3" style="border-radius: 8px; margin-bottom: 15px;" />
