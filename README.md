@@ -41,7 +41,7 @@ A high-performance Python backend (`backend.py`) powered by **FastAPI** and **BC
     Measured throughput depends on NIC, driver, CPU, blocklist size, and active rate limiters. My 4 core server easy handelt 700k pps whit only 29% cpu load so already a 4 core system can handel 2m+ pps
 
 <div align="center">
-  <img width="1000" height="643" alt="grafik" src="https://github.com/user-attachments/assets/33037f52-4675-45e7-bca1-ce2506c26d00" />
+  <img width="800" height="443" alt="grafik" src="https://github.com/user-attachments/assets/33037f52-4675-45e7-bca1-ce2506c26d00" />
   <img width="800" alt="Rule Management" src="https://github.com/user-attachments/assets/7bb5038b-863f-471b-aa47-741a75bcadb0" style="border-radius: 8px;" />
 </div>
 
