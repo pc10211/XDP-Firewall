@@ -35,6 +35,7 @@ API_KEY_FILE   = BASE_DIR / "api_key.txt"
 CERT_FILE      = BASE_DIR / "cert.pem"
 KEY_FILE       = BASE_DIR / "cert.key"
 SESSION_SECRET_FILE = BASE_DIR / "session_secret.bin"
+INTERFACES_FILE = BASE_DIR / "interfaces.txt"
 
 HTTP_PORT      = int(os.environ.get("FW_HTTP_PORT", "8000"))
 HTTPS_PORT     = int(os.environ.get("FW_HTTPS_PORT", "8443"))
@@ -142,11 +143,8 @@ try:
 except ImportError:
     BCC_AVAILABLE = False
 
-try:
-    from pyroute2 import IPRoute
-    PYROUTE2_AVAILABLE = True
-except ImportError:
-    PYROUTE2_AVAILABLE = False
+IPRoute = None
+PYROUTE2_AVAILABLE = False
 
 
 def _bpf_pin(fd: int, path: str) -> None:
@@ -181,10 +179,79 @@ _rules_cache: Optional[list] = None
 _rules_mtime: float = 0
 
 
+def _normalize_iface_string(value: Optional[str], fallback: str = IFACE) -> str:
+    raw = value or fallback or "eth0"
+    parts = []
+    seen = set()
+    for part in raw.split(','):
+        item = part.strip()
+        if not item or not IFACE_RE.match(item) or item in seen:
+            continue
+        seen.add(item)
+        parts.append(item)
+    if not parts and fallback and fallback != raw:
+        return _normalize_iface_string(fallback, "eth0")
+    if not parts:
+        parts = ["eth0"]
+    return ",".join(parts)
+
+
+def _load_iface_config() -> str:
+    try:
+        if INTERFACES_FILE.exists():
+            return _normalize_iface_string(INTERFACES_FILE.read_text().strip(), IFACE)
+    except Exception:
+        pass
+    return _normalize_iface_string(IFACE, "eth0")
+
+
+def _save_iface_config(iface: str) -> None:
+    val = _normalize_iface_string(iface, IFACE)
+    tmp = INTERFACES_FILE.with_name(f".interfaces.{os.getpid()}.{threading.get_ident()}.{secrets.token_hex(4)}.tmp")
+    try:
+        tmp.write_text(val)
+        os.chmod(tmp, 0o600)
+        tmp.replace(INTERFACES_FILE)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
 def ip_to_be(ip: str) -> int:
     net = ipaddress.ip_network(ip, strict=False)
     return struct.unpack('<I', net.network_address.packed)[0]
 
+
+def _normalize_rules(raw):
+    out = []
+    seen = set()
+    counters = {}
+    for idx, item in enumerate(raw if isinstance(raw, list) else []):
+        if not isinstance(item, dict):
+            continue
+        r = dict(item)
+        rid = str(r.get("id") or "").strip()
+        if not rid or len(rid) > 64 or not re.match(r"^[a-zA-Z0-9_-]+$", rid):
+            rid = f"rule{idx + 1:04d}"[:8]
+        if rid in seen:
+            base = re.sub(r"[^a-zA-Z0-9_-]", "", rid)[:6] or "rule"
+            n = counters.get(base, 1) + 1
+            while True:
+                cand = f"{base}{n:02d}"[:8]
+                if cand not in seen:
+                    counters[base] = n
+                    rid = cand
+                    break
+                n += 1
+        else:
+            base = re.sub(r"[^a-zA-Z0-9_-]", "", rid)[:6] or "rule"
+            counters[base] = max(counters.get(base, 0), 1)
+        r["id"] = rid
+        seen.add(rid)
+        out.append(r)
+    return out
 
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
@@ -520,21 +587,32 @@ class StatsRing:
     __slots__ = ('_ring', '_lock')
 
     def __init__(self):
-        self._ring: deque = deque(maxlen=120)
+        self._ring: deque = deque(maxlen=600)
         self._lock = threading.Lock()
 
-    def push(self, ts, passed, dropped):
+    def push(self, ts, passed, dropped, pass_bytes=0, drop_bytes=0):
         with self._lock:
-            self._ring.append((ts, passed, dropped))
+            self._ring.append((ts, passed, dropped, pass_bytes, drop_bytes))
 
     def pps(self):
         with self._lock:
             if len(self._ring) < 2:
                 return 0.0, 0.0
-            t0, p0, d0 = self._ring[-2]
-            t1, p1, d1 = self._ring[-1]
-            dt = t1 - t0
-        return ((p1 - p0) / dt, (d1 - d0) / dt) if dt > 0 else (0.0, 0.0)
+            e0 = self._ring[-2]
+            e1 = self._ring[-1]
+        dt = e1[0] - e0[0]
+        return ((e1[1] - e0[1]) / dt, (e1[2] - e0[2]) / dt) if dt > 0 else (0.0, 0.0)
+
+    def bps(self):
+        with self._lock:
+            if len(self._ring) < 2:
+                return 0.0, 0.0
+            e0 = self._ring[-2]
+            e1 = self._ring[-1]
+        dt = e1[0] - e0[0]
+        if dt <= 0 or len(e1) < 5:
+            return 0.0, 0.0
+        return ((e1[3] - e0[3]) / dt, (e1[4] - e0[4]) / dt)
 
     def history(self, n=60):
         with self._lock:
@@ -542,11 +620,15 @@ class StatsRing:
         out = []
         ln = len(ring)
         for i in range(1, min(n + 1, ln)):
-            t0, p0, d0 = ring[-i - 1] if i + 1 <= ln else ring[0]
-            t1, p1, d1 = ring[-i]
-            dt = t1 - t0
+            e_prev = ring[-i - 1] if i + 1 <= ln else ring[0]
+            e_cur  = ring[-i]
+            dt = e_cur[0] - e_prev[0]
             if dt > 0:
-                out.append({"ts": t1, "pass_pps": round((p1 - p0) / dt, 1), "drop_pps": round((d1 - d0) / dt, 1)})
+                out.append({
+                    "ts":       e_cur[0],
+                    "pass_pps": round((e_cur[1] - e_prev[1]) / dt, 1),
+                    "drop_pps": round((e_cur[2] - e_prev[2]) / dt, 1),
+                })
         out.reverse()
         return out
 
@@ -556,7 +638,8 @@ ring = StatsRing()
 
 class XDPFirewall:
     __slots__ = ('bpf', 'loaded', 'ifaces', '_lock', '_poll', '_run', '_nat_rules',
-                 'tc_attached', '_masq_applied', 'ipv6_allow')
+                 'tc_attached', '_masq_applied', 'ipv6_allow', 'requested_ifaces',
+                 '_rule_id_map', '_rule_meta', '_rule_num_by_string', '_next_rule_num', '_prev_pkt_bytes')
 
     def __init__(self):
         self.bpf = None
@@ -569,6 +652,12 @@ class XDPFirewall:
         self.tc_attached = []
         self._masq_applied = False
         self.ipv6_allow = False
+        self.requested_ifaces = []
+        self._rule_id_map: dict = {}
+        self._rule_meta: dict = {}
+        self._rule_num_by_string: dict = {}
+        self._next_rule_num = 1
+        self._prev_pkt_bytes = (0, 0)
 
     def load_rules(self):
         global _rules_cache, _rules_mtime
@@ -581,6 +670,7 @@ class XDPFirewall:
                     return list(_rules_cache)
                 data = json.loads(RULES_FILE.read_text())
                 if isinstance(data, list):
+                    data = _normalize_rules(data)
                     _rules_cache = data
                     _rules_mtime = mt
                     return list(data)
@@ -606,13 +696,30 @@ class XDPFirewall:
                     pass
                 raise
 
-    def compile_and_attach(self, rules, iface):
-        if not BCC_AVAILABLE:
-            return "BCC nicht verfügbar"
+    def _parse_ifaces(self, iface):
         ifaces = [i.strip() for i in iface.split(',') if i.strip() and IFACE_RE.match(i.strip())]
         if not ifaces:
             raise ValueError("Keine gültigen Interfaces")
+        return ifaces
+
+    def _cleanup_bpf(self, b):
+        if not b:
+            return
+        for name in ("cleanup", "close"):
+            fn = getattr(b, name, None)
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:
+                    pass
+                break
+
+    def compile_and_attach(self, rules, iface):
+        if not BCC_AVAILABLE:
+            return "BCC nicht verfügbar"
+        ifaces = self._parse_ifaces(iface)
         with self._lock:
+            old_bpf = self.bpf
             if self.bpf and self.loaded:
                 try:
                     for old in self.ifaces:
@@ -636,12 +743,16 @@ class XDPFirewall:
                 except Exception as e:
                     errors.append(f"{ifc}: {e}")
             if not attached:
+                self._cleanup_bpf(b)
                 raise ValueError(f"Konnte auf keinem Interface laden: {'; '.join(errors)}")
 
+            self._cleanup_bpf(old_bpf)
             self.bpf = b
             self.ifaces = attached
+            self.requested_ifaces = ifaces
+            _save_iface_config(",".join(ifaces))
             self.loaded = True
-            self._populate_maps(rules)
+            self._populate_maps(rules, preserve_counters=False)
             self._apply_nat(rules)
 
             has_est = any(r.get("type") == "established" and r.get("enabled", True) for r in rules)
@@ -655,7 +766,30 @@ class XDPFirewall:
         if has_est:
             tc_msg = " + TC-Conntrack aktiv" if tc_ok else " + TC fehlgeschlagen (kein Conntrack)"
 
-        return f"XDP auf {len(attached)} Interfaces – {len(rules)} Regeln{tc_msg}"
+        return f"XDP neu geladen auf {len(attached)} Interfaces – {len(rules)} Regeln{tc_msg}"
+
+    def apply_runtime(self, rules, iface):
+        if not BCC_AVAILABLE:
+            return "BCC nicht verfügbar"
+        ifaces = self._parse_ifaces(iface)
+        with self._lock:
+            base_ifaces = self.requested_ifaces or self.ifaces
+            same_ifaces = self.loaded and self.bpf and sorted(ifaces) == sorted(base_ifaces)
+            if not same_ifaces:
+                return None
+            self.requested_ifaces = ifaces
+            _save_iface_config(",".join(ifaces))
+            self._populate_maps(rules, preserve_counters=True)
+            self._apply_nat(rules)
+            has_est = any(r.get("type") == "established" and r.get("enabled", True) for r in rules)
+            tc_msg = ""
+            if has_est and not self.tc_attached:
+                tc_ok = self._attach_tc(self.bpf, self.ifaces)
+                tc_msg = " + TC-Conntrack aktiv" if tc_ok else " + TC fehlgeschlagen"
+            elif not has_est and self.tc_attached:
+                self._detach_tc()
+                tc_msg = " + TC getrennt"
+            return f"Regeln ohne Neustart aktualisiert – {len(rules)} Regeln{tc_msg}"
 
     def _attach_tc(self, b, ifaces):
         try:
@@ -677,39 +811,7 @@ class XDPFirewall:
         return len(attached) > 0
 
     def _tc_pyroute2(self, fn_tc, ifc) -> bool:
-        if not PYROUTE2_AVAILABLE:
-            return False
-        ipr = None
-        try:
-            ipr = IPRoute()
-            idx = ipr.link_lookup(ifname=ifc)[0]
-            try:
-                ipr.tc("add", "clsact", idx)
-            except Exception:
-                pass
-
-            attempts = [
-                dict(fd=fn_tc.fd, name=fn_tc.name, parent="ffff:fff3", classid=1, direct_act=True),
-                dict(fd=fn_tc.fd, name=fn_tc.name, parent="ffff:fff3", direct_act=True),
-                dict(fd=fn_tc.fd, name=fn_tc.name, parent="ffff:fff3", classid=1, direct_act=True, protocol=3),
-            ]
-            for kw in attempts:
-                try:
-                    ipr.tc("add-filter", "bpf", idx, ":1", **kw)
-                    print(f"[TC] pyroute2 OK auf {ifc}")
-                    return True
-                except Exception as e:
-                    print(f"[TC] pyroute2 Versuch fehlgeschlagen: {e}")
-            return False
-        except Exception as e:
-            print(f"[TC] pyroute2 generell fehlgeschlagen auf {ifc}: {e}")
-            return False
-        finally:
-            if ipr:
-                try:
-                    ipr.close()
-                except Exception:
-                    pass
+        return False
 
     def _tc_cli(self, fd: int, ifc: str) -> bool:
         pin = f"/sys/fs/bpf/fw_egress_{ifc}"
@@ -734,15 +836,9 @@ class XDPFirewall:
             return False
 
     def _detach_tc(self):
-        for ifc in self.tc_attached:
+        for ifc in list(dict.fromkeys(self.tc_attached)):
             try:
-                if PYROUTE2_AVAILABLE:
-                    ipr = IPRoute()
-                    idx = ipr.link_lookup(ifname=ifc)[0]
-                    ipr.tc("del", "clsact", idx)
-                    ipr.close()
-                else:
-                    subprocess.run(["tc", "qdisc", "del", "dev", ifc, "clsact"], capture_output=True, timeout=5)
+                subprocess.run(["tc", "qdisc", "del", "dev", ifc, "clsact"], capture_output=True, timeout=5)
             except Exception:
                 pass
             try:
@@ -751,7 +847,47 @@ class XDPFirewall:
                 pass
         self.tc_attached = []
 
-    def _populate_maps(self, rules):
+    def configured_iface(self):
+        return ",".join(self.requested_ifaces or self.ifaces)
+
+    def _clear_table(self, name):
+        try:
+            m = self.bpf[name]
+            keys = list(m.keys())
+            for k in keys:
+                try:
+                    m.__delitem__(k)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _prepare_rule_ids(self, rules):
+        self._rule_id_map = {}
+        self._rule_meta = {}
+        used = set()
+        for r in rules:
+            rid_str = r.get("id", "")
+            if not rid_str:
+                continue
+            num = self._rule_num_by_string.get(rid_str)
+            if not num or num >= 1024:
+                while self._next_rule_num in used or self._next_rule_num in self._rule_id_map or self._next_rule_num >= 1024:
+                    self._next_rule_num += 1
+                if self._next_rule_num >= 1024:
+                    continue
+                num = self._next_rule_num
+                self._rule_num_by_string[rid_str] = num
+                self._next_rule_num += 1
+            used.add(num)
+            self._rule_id_map[num] = rid_str
+            self._rule_meta[rid_str] = {
+                "numeric_id": num,
+                "comment": r.get("comment", ""),
+                "type": r.get("type", "filter"),
+            }
+
+    def _populate_maps(self, rules, preserve_counters=False):
         b = self.bpf
         wl_subnet       = b["wl_subnet"]
         bl_subnet       = b["bl_subnet"]
@@ -759,18 +895,51 @@ class XDPFirewall:
         bl_port         = b["bl_port"]
         wl_icmp         = b["wl_icmp"]
         rl_global_cfg   = b["rl_global_cfg"]
+        rl_global_rule  = b["rl_global_rule"]
         rl_proto_cfg    = b["rl_proto_cfg"]
+        rl_proto_rule   = b["rl_proto_rule"]
         rl_ip_cfg       = b["rl_ip_cfg"]
         rl_port_cfg     = b["rl_port_cfg"]
+        rl_port_rule    = b["rl_port_rule"]
         dns_rl_cfg      = b["dns_rl_cfg"]
+        dns_rule        = b["dns_rule"]
         stateful_enabled= b["stateful_enabled"]
         conn_timeout_cfg= b["conn_timeout_cfg"]
         per_ip_port_cfg = b["per_ip_port_cfg"]
+        per_ip_port_rule= b["per_ip_port_rule"]
         bl_out_port     = b["bl_out_port"]
         bl_out_subnet   = b["bl_out_subnet"]
         ipv6_policy     = b["ipv6_policy"]
 
+        for mname in ("wl_subnet", "bl_subnet", "wl_port", "bl_port", "wl_icmp",
+                      "rl_proto_cfg", "rl_proto_rule", "rl_ip_cfg", "rl_port_cfg",
+                      "rl_port_rule", "dns_rl_cfg", "dns_rule", "per_ip_port_cfg",
+                      "per_ip_port_rule", "bl_out_port", "bl_out_subnet", "dns_wl"):
+            self._clear_table(mname)
+        if not preserve_counters:
+            for mname in ("stats", "rule_hits", "rule_pass_hits", "rule_drop_hits", "proto_pkts", "proto_bytes", "egress_pkts",
+                          "egress_bytes", "egress_drop_pkts", "egress_drop_bytes"):
+                try:
+                    m = b[mname]
+                    for i in range(len(m)):
+                        m[i] = m.Leaf(0)
+                except Exception:
+                    pass
+        for mname in ("rl_global_rule",):
+            try:
+                m = b[mname]
+                for i in range(len(m)):
+                    m[i] = m.Leaf(0)
+            except Exception:
+                pass
+        self._prepare_rule_ids(rules)
+
+        def _rid_of(r):
+            meta = self._rule_meta.get(r.get("id", ""))
+            return meta["numeric_id"] if meta else 0
+
         rl_global_cfg[0]    = rl_global_cfg.Leaf(0)
+        rl_global_rule[0]   = rl_global_rule.Leaf(0)
         stateful_enabled[0] = stateful_enabled.Leaf(0)
         conn_timeout_cfg[0] = conn_timeout_cfg.Leaf(0)
         ipv6_policy[0]      = ipv6_policy.Leaf(1 if self.ipv6_allow else 0)
@@ -783,6 +952,7 @@ class XDPFirewall:
             rl = r.get("rate_limit") or 0
             pip = r.get("per_ip_limit") or 0
             src_port = r.get("src_port", "any") or "any"
+            rid = _rid_of(r)
 
             if t == "filter":
                 action = r.get("action", "allow")
@@ -799,12 +969,14 @@ class XDPFirewall:
                             it = int(icmp_tp)
                             ic = 0xFF if icmp_cd == "any" else int(icmp_cd)
                             key16 = (it << 8) | ic
-                        wl_icmp[wl_icmp.Key(key16)] = wl_icmp.Leaf(1)
+                        wl_icmp[wl_icmp.Key(key16)] = wl_icmp.Leaf(proto=1, port=key16, action=1, rate_limit=rl, rule_id=rid)
+                        icmp_pk = (1 << 16) | key16
                         if rl > 0:
-                            rl_proto_cfg[rl_proto_cfg.Key(1)] = rl_proto_cfg.Leaf(rl)
+                            rl_port_cfg[rl_port_cfg.Key(icmp_pk)] = rl_port_cfg.Leaf(rl)
+                            rl_port_rule[rl_port_rule.Key(icmp_pk)] = rl_port_rule.Leaf(rid)
                         if pip > 0:
-                            icmp_pk = (1 << 16) | 0xFFFF
                             per_ip_port_cfg[per_ip_port_cfg.Key(icmp_pk)] = per_ip_port_cfg.Leaf(pip)
+                            per_ip_port_rule[per_ip_port_rule.Key(icmp_pk)] = per_ip_port_rule.Leaf(rid)
                     elif src != "any":
                         try:
                             net = ipaddress.ip_network(src, strict=False)
@@ -812,52 +984,65 @@ class XDPFirewall:
                         except ValueError:
                             continue
                         port = 0 if dst_port == "any" else int(dst_port)
-                        wl_subnet[wl_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = wl_subnet.Leaf(proto=proto, port=port, action=1, rate_limit=rl)
+                        wl_subnet[wl_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = wl_subnet.Leaf(proto=proto, port=port, action=1, rate_limit=rl, rule_id=rid)
                     else:
                         if dst_port != "any":
                             port = int(dst_port)
                             if proto:
                                 pk = (proto << 16) | port
-                                wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=rl)
+                                wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=rl, rule_id=rid)
                                 if rl > 0:
                                     rl_port_cfg[rl_port_cfg.Key(pk)] = rl_port_cfg.Leaf(rl)
+                                    rl_port_rule[rl_port_rule.Key(pk)] = rl_port_rule.Leaf(rid)
                                 if pip > 0:
                                     per_ip_port_cfg[per_ip_port_cfg.Key(pk)] = per_ip_port_cfg.Leaf(pip)
+                                    per_ip_port_rule[per_ip_port_rule.Key(pk)] = per_ip_port_rule.Leaf(rid)
                             else:
                                 for p in (6, 17):
                                     pk = (p << 16) | port
-                                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=rl)
+                                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=rl, rule_id=rid)
                                     if rl > 0:
                                         rl_port_cfg[rl_port_cfg.Key(pk)] = rl_port_cfg.Leaf(rl)
+                                        rl_port_rule[rl_port_rule.Key(pk)] = rl_port_rule.Leaf(rid)
                                     if pip > 0:
                                         per_ip_port_cfg[per_ip_port_cfg.Key(pk)] = per_ip_port_cfg.Leaf(pip)
-                                wl_port[wl_port.Key(port)] = wl_port.Leaf(proto=0, port=port, action=1, rate_limit=rl)
+                                        per_ip_port_rule[per_ip_port_rule.Key(pk)] = per_ip_port_rule.Leaf(rid)
+                                wl_port[wl_port.Key(port)] = wl_port.Leaf(proto=0, port=port, action=1, rate_limit=rl, rule_id=rid)
                                 if rl > 0:
                                     rl_port_cfg[rl_port_cfg.Key(port)] = rl_port_cfg.Leaf(rl)
+                                    rl_port_rule[rl_port_rule.Key(port)] = rl_port_rule.Leaf(rid)
                                 if pip > 0:
                                     per_ip_port_cfg[per_ip_port_cfg.Key(port)] = per_ip_port_cfg.Leaf(pip)
+                                    per_ip_port_rule[per_ip_port_rule.Key(port)] = per_ip_port_rule.Leaf(rid)
                         if src_port != "any":
                             port = int(src_port)
                             if proto:
-                                pk = (proto << 16) | port
-                                wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=rl)
+                                pk = (1 << 24) | (proto << 16) | port
+                                wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=rl, rule_id=rid)
                                 if rl > 0:
                                     rl_port_cfg[rl_port_cfg.Key(pk)] = rl_port_cfg.Leaf(rl)
+                                    rl_port_rule[rl_port_rule.Key(pk)] = rl_port_rule.Leaf(rid)
                                 if pip > 0:
                                     per_ip_port_cfg[per_ip_port_cfg.Key(pk)] = per_ip_port_cfg.Leaf(pip)
+                                    per_ip_port_rule[per_ip_port_rule.Key(pk)] = per_ip_port_rule.Leaf(rid)
                             else:
                                 for p in (6, 17):
-                                    pk = (p << 16) | port
-                                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=rl)
+                                    pk = (1 << 24) | (p << 16) | port
+                                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=rl, rule_id=rid)
                                     if rl > 0:
                                         rl_port_cfg[rl_port_cfg.Key(pk)] = rl_port_cfg.Leaf(rl)
+                                        rl_port_rule[rl_port_rule.Key(pk)] = rl_port_rule.Leaf(rid)
                                     if pip > 0:
                                         per_ip_port_cfg[per_ip_port_cfg.Key(pk)] = per_ip_port_cfg.Leaf(pip)
-                                wl_port[wl_port.Key(port)] = wl_port.Leaf(proto=0, port=port, action=1, rate_limit=rl)
+                                        per_ip_port_rule[per_ip_port_rule.Key(pk)] = per_ip_port_rule.Leaf(rid)
+                                pk_any = (1 << 24) | port
+                                wl_port[wl_port.Key(pk_any)] = wl_port.Leaf(proto=0, port=port, action=1, rate_limit=rl, rule_id=rid)
                                 if rl > 0:
-                                    rl_port_cfg[rl_port_cfg.Key(port)] = rl_port_cfg.Leaf(rl)
+                                    rl_port_cfg[rl_port_cfg.Key(pk_any)] = rl_port_cfg.Leaf(rl)
+                                    rl_port_rule[rl_port_rule.Key(pk_any)] = rl_port_rule.Leaf(rid)
                                 if pip > 0:
-                                    per_ip_port_cfg[per_ip_port_cfg.Key(port)] = per_ip_port_cfg.Leaf(pip)
+                                    per_ip_port_cfg[per_ip_port_cfg.Key(pk_any)] = per_ip_port_cfg.Leaf(pip)
+                                    per_ip_port_rule[per_ip_port_rule.Key(pk_any)] = per_ip_port_rule.Leaf(rid)
                 elif action == "block":
                     direction = r.get("direction", "inbound")
                     do_in = direction in ("inbound", "both")
@@ -868,29 +1053,53 @@ class XDPFirewall:
                             addr = ip_to_be(src)
                         except ValueError:
                             continue
+                        b_port = 0 if dst_port == "any" else int(dst_port)
+                        b_proto = 0 if not proto else proto
                         if do_in:
-                            bl_subnet[bl_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = bl_subnet.Leaf(1)
+                            bl_subnet[bl_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = bl_subnet.Leaf(proto=b_proto, port=b_port, action=1, rate_limit=0, rule_id=rid)
                         if do_out:
-                            bl_out_subnet[bl_out_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = bl_out_subnet.Leaf(1)
-                    elif dst_port != "any":
-                        port = int(dst_port)
-                        if proto:
-                            pk = (proto << 16) | port
-                            if do_in:
-                                bl_port[bl_port.Key(pk)] = bl_port.Leaf(1)
-                            if do_out:
-                                bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(1)
-                        else:
-                            for p in (6, 17):
-                                pk = (p << 16) | port
+                            bl_out_subnet[bl_out_subnet.Key(prefixlen=net.prefixlen, addr=addr)] = bl_out_subnet.Leaf(proto=b_proto, port=b_port, action=1, rate_limit=0, rule_id=rid)
+                    else:
+                        if dst_port != "any":
+                            port = int(dst_port)
+                            if proto:
+                                pk = (proto << 16) | port
                                 if do_in:
-                                    bl_port[bl_port.Key(pk)] = bl_port.Leaf(1)
+                                    bl_port[bl_port.Key(pk)] = bl_port.Leaf(proto=proto, port=port, action=1, rate_limit=0, rule_id=rid)
                                 if do_out:
-                                    bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(1)
-                            if do_in:
-                                bl_port[bl_port.Key(port)] = bl_port.Leaf(1)
-                            if do_out:
-                                bl_out_port[bl_out_port.Key(port)] = bl_out_port.Leaf(1)
+                                    bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(proto=proto, port=port, action=1, rate_limit=0, rule_id=rid)
+                            else:
+                                for p in (6, 17):
+                                    pk = (p << 16) | port
+                                    if do_in:
+                                        bl_port[bl_port.Key(pk)] = bl_port.Leaf(proto=p, port=port, action=1, rate_limit=0, rule_id=rid)
+                                    if do_out:
+                                        bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(proto=p, port=port, action=1, rate_limit=0, rule_id=rid)
+                                if do_in:
+                                    bl_port[bl_port.Key(port)] = bl_port.Leaf(proto=0, port=port, action=1, rate_limit=0, rule_id=rid)
+                                if do_out:
+                                    bl_out_port[bl_out_port.Key(port)] = bl_out_port.Leaf(proto=0, port=port, action=1, rate_limit=0, rule_id=rid)
+                        if src_port != "any":
+                            port = int(src_port)
+                            if proto:
+                                pk = (1 << 24) | (proto << 16) | port
+                                if do_in:
+                                    bl_port[bl_port.Key(pk)] = bl_port.Leaf(proto=proto, port=port, action=1, rate_limit=0, rule_id=rid)
+                                if do_out:
+                                    bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(proto=proto, port=port, action=1, rate_limit=0, rule_id=rid)
+                            else:
+                                for p in (6, 17):
+                                    pk = (1 << 24) | (p << 16) | port
+                                    if do_in:
+                                        bl_port[bl_port.Key(pk)] = bl_port.Leaf(proto=p, port=port, action=1, rate_limit=0, rule_id=rid)
+                                    if do_out:
+                                        bl_out_port[bl_out_port.Key(pk)] = bl_out_port.Leaf(proto=p, port=port, action=1, rate_limit=0, rule_id=rid)
+                                if do_in:
+                                    pk_any = (1 << 24) | port
+                                    bl_port[bl_port.Key(pk_any)] = bl_port.Leaf(proto=0, port=port, action=1, rate_limit=0, rule_id=rid)
+                                if do_out:
+                                    pk_any = (1 << 24) | port
+                                    bl_out_port[bl_out_port.Key(pk_any)] = bl_out_port.Leaf(proto=0, port=port, action=1, rate_limit=0, rule_id=rid)
 
             elif t == "established":
                 stateful_enabled[0] = stateful_enabled.Leaf(1)
@@ -902,8 +1111,10 @@ class XDPFirewall:
                     continue
                 if proto == 0:
                     rl_global_cfg[0] = rl_global_cfg.Leaf(pps)
+                    rl_global_rule[0] = rl_global_rule.Leaf(rid)
                 else:
                     rl_proto_cfg[rl_proto_cfg.Key(proto)] = rl_proto_cfg.Leaf(pps)
+                    rl_proto_rule[rl_proto_rule.Key(proto)] = rl_proto_rule.Leaf(rid)
 
             elif t == "ip_ratelimit":
                 try:
@@ -915,7 +1126,7 @@ class XDPFirewall:
                     try:
                         net = ipaddress.ip_network(src, strict=False)
                         addr = ip_to_be(src)
-                        rl_ip_cfg[rl_ip_cfg.Key(prefixlen=net.prefixlen, addr=addr)] = rl_ip_cfg.Leaf(pps=pps, enabled=1, pad=[0,0,0])
+                        rl_ip_cfg[rl_ip_cfg.Key(prefixlen=net.prefixlen, addr=addr)] = rl_ip_cfg.Leaf(pps=pps, enabled=1, pad=[0,0,0], rule_id=rid)
                     except ValueError:
                         continue
 
@@ -924,10 +1135,13 @@ class XDPFirewall:
                 val = r.get("value", "both")
                 if val in ("query", "both"):
                     dns_wl[dns_wl.Key(0)] = dns_wl.Leaf(1)
+                    dns_rule[dns_rule.Key(0)] = dns_rule.Leaf(rid)
                 if val in ("response", "both"):
                     dns_wl[dns_wl.Key(1)] = dns_wl.Leaf(1)
+                    dns_rule[dns_rule.Key(1)] = dns_rule.Leaf(rid)
                 if val == "both":
                     dns_wl[dns_wl.Key(2)] = dns_wl.Leaf(1)
+                    dns_rule[dns_rule.Key(2)] = dns_rule.Leaf(rid)
 
             elif t == "forward":
                 port_str = r.get("dst_port") or r.get("value", "0")
@@ -937,11 +1151,11 @@ class XDPFirewall:
                     continue
                 if proto:
                     pk = (proto << 16) | port
-                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=0)
+                    wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=proto, port=port, action=1, rate_limit=0, rule_id=rid)
                 else:
                     for p in (6, 17):
                         pk = (p << 16) | port
-                        wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=0)
+                        wl_port[wl_port.Key(pk)] = wl_port.Leaf(proto=p, port=port, action=1, rate_limit=0, rule_id=rid)
 
             elif t == "conn_timeout":
                 try:
@@ -1041,24 +1255,130 @@ class XDPFirewall:
         self._masq_applied = False
 
     def read_raw_stats(self):
+        zero = {"passed": 0, "dropped": 0, "xdp_dropped": 0, "rl_dropped": 0, "bl_dropped": 0,
+                "icmp_dropped": 0, "ct_passed": 0, "ct_tracked": 0, "out_dropped": 0,
+                "tc_out_blocked": 0, "ipv6_dropped": 0, "bad_dropped": 0,
+                "proto": {"tcp":   {"pass_pkts": 0, "drop_pkts": 0, "pass_bytes": 0, "drop_bytes": 0},
+                          "udp":   {"pass_pkts": 0, "drop_pkts": 0, "pass_bytes": 0, "drop_bytes": 0},
+                          "icmp":  {"pass_pkts": 0, "drop_pkts": 0, "pass_bytes": 0, "drop_bytes": 0},
+                          "other": {"pass_pkts": 0, "drop_pkts": 0, "pass_bytes": 0, "drop_bytes": 0}},
+                "egress": {"tcp":   {"pkts": 0, "bytes": 0, "drop_pkts": 0, "drop_bytes": 0},
+                           "udp":   {"pkts": 0, "bytes": 0, "drop_pkts": 0, "drop_bytes": 0},
+                           "icmp":  {"pkts": 0, "bytes": 0, "drop_pkts": 0, "drop_bytes": 0},
+                           "other": {"pkts": 0, "bytes": 0, "drop_pkts": 0, "drop_bytes": 0}},
+                "bytes_total": {"pass": 0, "drop": 0}}
         if not BCC_AVAILABLE or not self.bpf or not self.loaded:
-            return {"passed": 0, "dropped": 0, "rl_dropped": 0, "bl_dropped": 0,
-                    "icmp_dropped": 0, "ct_passed": 0, "ct_tracked": 0, "out_dropped": 0}
+            return zero
         try:
             s = self.bpf["stats"]
-            return {
-                "passed":       int(s[0].value),
-                "dropped":      int(s[1].value),
-                "rl_dropped":   int(s[2].value),
-                "bl_dropped":   int(s[3].value),
-                "icmp_dropped": int(s[4].value),
-                "ct_passed":    int(s[5].value),
-                "ct_tracked":   int(s[6].value),
-                "out_dropped":  int(s[7].value),
+            def sv(i: int) -> int:
+                try:
+                    return int(s[i].value)
+                except Exception:
+                    return 0
+            xdp_dropped = sv(1)
+            out_dropped = sv(7)
+            out = {
+                "passed":        sv(0),
+                "dropped":       xdp_dropped + out_dropped,
+                "xdp_dropped":   xdp_dropped,
+                "rl_dropped":    sv(2),
+                "bl_dropped":    sv(3),
+                "icmp_dropped":  sv(4),
+                "ct_passed":     sv(5),
+                "ct_tracked":    sv(6),
+                "out_dropped":   out_dropped,
+                "tc_out_blocked":out_dropped,
+                "ipv6_dropped":  sv(8),
+                "bad_dropped":   sv(9),
             }
         except Exception:
-            return {"passed": 0, "dropped": 0, "rl_dropped": 0, "bl_dropped": 0,
-                    "icmp_dropped": 0, "ct_passed": 0, "ct_tracked": 0, "out_dropped": 0}
+            return zero
+
+        proto_out = {k: {"pass_pkts": 0, "drop_pkts": 0, "pass_bytes": 0, "drop_bytes": 0}
+                     for k in ("tcp", "udp", "icmp", "other")}
+        bytes_pass_total = 0
+        bytes_drop_total = 0
+        try:
+            pp = self.bpf["proto_pkts"]
+            pb = self.bpf["proto_bytes"]
+            names = ("tcp", "udp", "icmp", "other")
+            for slot, name in enumerate(names):
+                base = slot << 1
+                pp_pass  = int(pp[base].value)
+                pp_drop  = int(pp[base | 1].value)
+                pb_pass  = int(pb[base].value)
+                pb_drop  = int(pb[base | 1].value)
+                proto_out[name] = {
+                    "pass_pkts":  pp_pass,
+                    "drop_pkts":  pp_drop,
+                    "pass_bytes": pb_pass,
+                    "drop_bytes": pb_drop,
+                }
+                bytes_pass_total += pb_pass
+                bytes_drop_total += pb_drop
+        except Exception:
+            pass
+        out["proto"] = proto_out
+        out["bytes_total"] = {"pass": bytes_pass_total, "drop": bytes_drop_total}
+
+        egress_out = {k: {"pkts": 0, "bytes": 0, "drop_pkts": 0, "drop_bytes": 0}
+                      for k in ("tcp", "udp", "icmp", "other")}
+        try:
+            ep = self.bpf["egress_pkts"]
+            eb = self.bpf["egress_bytes"]
+            edp = None
+            edb = None
+            try:
+                edp = self.bpf["egress_drop_pkts"]
+                edb = self.bpf["egress_drop_bytes"]
+            except Exception:
+                pass
+            names = ("tcp", "udp", "icmp", "other")
+            for slot, name in enumerate(names):
+                egress_out[name] = {
+                    "pkts":       int(ep[slot].value),
+                    "bytes":      int(eb[slot].value),
+                    "drop_pkts":  int(edp[slot].value) if edp else 0,
+                    "drop_bytes": int(edb[slot].value) if edb else 0,
+                }
+        except Exception:
+            pass
+        out["egress"] = egress_out
+
+        return out
+
+    def read_rule_hits(self):
+        out = {}
+        if not BCC_AVAILABLE or not self.bpf or not self.loaded:
+            return out
+        try:
+            mt = self.bpf["rule_hits"]
+        except Exception:
+            return out
+        mp = None
+        md = None
+        try:
+            mp = self.bpf["rule_pass_hits"]
+            md = self.bpf["rule_drop_hits"]
+        except Exception:
+            pass
+        id_map = self._rule_id_map
+        for numeric_id, string_id in id_map.items():
+            try:
+                total = int(mt[numeric_id].value)
+            except Exception:
+                total = 0
+            try:
+                passed = int(mp[numeric_id].value) if mp else 0
+            except Exception:
+                passed = 0
+            try:
+                dropped = int(md[numeric_id].value) if md else 0
+            except Exception:
+                dropped = 0
+            out[string_id] = {"total": total, "pass": passed, "drop": dropped}
+        return out
 
     def set_ipv6_policy(self, allow: bool):
         self.ipv6_allow = bool(allow)
@@ -1074,7 +1394,7 @@ class XDPFirewall:
         if not self.bpf or not self.loaded:
             return
         try:
-            now = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+            now = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
         except (AttributeError, OSError):
             now = time.monotonic_ns()
         try:
@@ -1112,7 +1432,7 @@ class XDPFirewall:
         if not self.bpf or not self.loaded:
             return
         try:
-            now = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+            now = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
         except (AttributeError, OSError):
             now = time.monotonic_ns()
         stale = 5_000_000_000
@@ -1144,7 +1464,9 @@ class XDPFirewall:
                 time.sleep(1)
                 try:
                     st = self.read_raw_stats()
-                    ring.push(time.monotonic(), st["passed"], st["dropped"])
+                    bt = st.get("bytes_total") or {"pass": 0, "drop": 0}
+                    ring.push(time.monotonic(), st["passed"], st["dropped"],
+                              bt.get("pass", 0), bt.get("drop", 0))
                 except Exception:
                     pass
                 gc_tick += 1
@@ -1176,6 +1498,8 @@ class XDPFirewall:
                     pass
                 self.loaded = False
                 self.ifaces = []
+                self._cleanup_bpf(self.bpf)
+                self.bpf = None
 
 
 xdp = XDPFirewall()
@@ -1198,6 +1522,8 @@ async def security_headers(request: Request, call_next):
         "connect-src 'self'; "
         "frame-ancestors 'none'"
     )
+    if request.url.path in ("/", "/login"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
     return response
 
 
@@ -1245,7 +1571,7 @@ async def login_page():
         html = (BASE_DIR / "login.html").read_text()
     except FileNotFoundError:
         html = _FALLBACK_LOGIN_HTML
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.post("/api/login")
@@ -1286,12 +1612,25 @@ async def auth_check():
 @app.get("/", response_class=HTMLResponse)
 async def root():
     html = (BASE_DIR / "index.html").read_text()
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.get("/api/rules")
 async def get_rules():
-    return xdp.load_rules()
+    rules = xdp.load_rules()
+    hits = xdp.read_rule_hits()
+    for r in rules:
+        rid = r.get("id", "")
+        c = hits.get(rid, {"total": 0, "pass": 0, "drop": 0})
+        if isinstance(c, dict):
+            r["hit_count"] = int(c.get("total", 0) or 0)
+            r["hit_pass_count"] = int(c.get("pass", 0) or 0)
+            r["hit_drop_count"] = int(c.get("drop", 0) or 0)
+        else:
+            r["hit_count"] = int(c or 0)
+            r["hit_pass_count"] = 0
+            r["hit_drop_count"] = 0
+    return rules
 
 
 @app.post("/api/rules")
@@ -1383,8 +1722,10 @@ async def apply_rules(req: ApplyRequest):
     rules = xdp.load_rules()
     iface = req.iface or IFACE
     try:
-        msg = xdp.compile_and_attach(rules, iface)
-        return {"ok": True, "message": msg}
+        msg = xdp.apply_runtime(rules, iface)
+        if msg is None:
+            msg = xdp.compile_and_attach(rules, iface)
+        return {"ok": True, "message": msg, "reloaded": msg.startswith("XDP neu geladen"), "configured_iface": xdp.configured_iface(), "iface": ",".join(xdp.ifaces) if xdp.ifaces else ""}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -1399,14 +1740,23 @@ async def detach():
 async def stats():
     raw = xdp.read_raw_stats()
     pp, dp = ring.pps()
+    pb, db = ring.bps()
     return {**raw,
             "pass_pps": round(pp, 1), "drop_pps": round(dp, 1), "total_pps": round(pp + dp, 1),
+            "pass_bps": round(pb, 1), "drop_bps": round(db, 1), "total_bps": round(pb + db, 1),
             "loaded": xdp.loaded,
             "iface": ",".join(xdp.ifaces) if xdp.ifaces else "",
             "rules": len(xdp.load_rules()),
-            "history": ring.history(60),
+            "history": ring.history(300),
+            "configured_iface": xdp.configured_iface(),
             "tc_active": len(xdp.tc_attached) > 0,
             "ipv6_allow": xdp.ipv6_allow}
+
+
+
+@app.get("/api/rule-hits")
+async def rule_hits():
+    return {"hits": xdp.read_rule_hits()}
 
 
 @app.get("/api/status")
@@ -1415,6 +1765,7 @@ async def status():
             "iface": ",".join(xdp.ifaces) if xdp.ifaces else "",
             "rules": len(xdp.load_rules()),
             "bcc": BCC_AVAILABLE, "pyroute2": PYROUTE2_AVAILABLE,
+            "configured_iface": xdp.configured_iface(),
             "tc_active": len(xdp.tc_attached) > 0,
             "ipv6_allow": xdp.ipv6_allow}
 
@@ -1434,11 +1785,14 @@ async def stream(request: Request):
             try:
                 raw = xdp.read_raw_stats()
                 pp, dp = ring.pps()
+                pb, db = ring.bps()
                 d = {**raw,
                      "pass_pps": round(pp, 1), "drop_pps": round(dp, 1), "total_pps": round(pp + dp, 1),
+                     "pass_bps": round(pb, 1), "drop_bps": round(db, 1), "total_bps": round(pb + db, 1),
                      "loaded": xdp.loaded,
                      "iface": ",".join(xdp.ifaces) if xdp.ifaces else "",
                      "rules": len(xdp.load_rules()),
+                     "configured_iface": xdp.configured_iface(),
                      "tc_active": len(xdp.tc_attached) > 0,
                      "ipv6_allow": xdp.ipv6_allow}
                 yield f"data: {json.dumps(d)}\n\n"
@@ -1461,7 +1815,7 @@ async def on_start():
     rules = xdp.load_rules()
     if rules:
         try:
-            xdp.compile_and_attach(rules, IFACE)
+            xdp.compile_and_attach(rules, _load_iface_config())
         except Exception as e:
             print(f"[STARTUP] XDP konnte nicht geladen werden: {e}")
 
@@ -1511,7 +1865,7 @@ if __name__ == "__main__":
         print(f"[HTTPS] Starte auf Port {HTTPS_PORT} mit TLS")
         uvicorn.run(app, host="0.0.0.0", port=HTTPS_PORT,
                     ssl_keyfile=str(KEY_FILE), ssl_certfile=str(CERT_FILE),
-                    log_config=_LOG_CFG)
+                    loop="asyncio", log_config=_LOG_CFG)
     else:
         print(f"[HTTP] Starte auf Port {HTTP_PORT} OHNE TLS (NICHT für Produktion!)")
-        uvicorn.run(app, host="0.0.0.0", port=HTTP_PORT, log_config=_LOG_CFG)
+        uvicorn.run(app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_config=_LOG_CFG)

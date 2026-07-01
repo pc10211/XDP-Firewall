@@ -15,22 +15,24 @@ html{scroll-behavior:smooth}
 
 
 :root[data-theme="dark"]{
+  
   --bg:#0a0a0f;
   --surf:#101018;
   --surf-2:#141420;
   --card:#17172280;
   --card-solid:#171722;
   --hover:#1e1e2c;
-  /* borders */
+  
   --border:#23232f;
   --border-2:#2e2e3e;
   --border-strong:#3a3a4e;
-  /* text */
+  
   --text:#eaeaf0;
   --text-2:#c0c0cc;
   --muted:#7a7a88;
   --dim:#4a4a58;
-  --accent:#5b8def;       
+  
+  --accent:#5b8def;        
   --accent-hi:#7aa5f5;
   --green:#2dd4a0;
   --red:#f05252;
@@ -38,6 +40,7 @@ html{scroll-behavior:smooth}
   --purple:#a78bfa;
   --cyan:#22d3ee;
   --pink:#ec4899;
+  
   --shadow-lg:0 10px 40px -8px rgba(0,0,0,.55);
   --shadow-sm:0 1px 2px rgba(0,0,0,.3);
   --shadow-glow:0 0 24px rgba(91,141,239,.18);
@@ -86,13 +89,27 @@ body{
   font-family:var(--ui);
   background:var(--bg);
   background-image:var(--bg-gradient);
+  background-size: 200% 200%;
+  animation: bgDrift 20s ease infinite;
   color:var(--text);
   display:flex;flex-direction:column;height:100vh;overflow:hidden;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   font-feature-settings:"cv11","ss01";
   transition:background-color .3s ease,color .3s ease;
 }
+@keyframes bgDrift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
 ::selection{background:color-mix(in srgb, var(--accent) 40%, transparent);color:var(--text)}
+
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
 
 
 #topbar{
@@ -157,17 +174,19 @@ body{
   display:inline-flex;align-items:center;gap:6px;
   padding:8px 13px;border-radius:7px;
   font-size:12px;font-weight:600;cursor:pointer;
-  border:1px solid transparent;transition:all var(--trans);
+  border:1px solid transparent;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   white-space:nowrap;font-family:var(--ui);
   letter-spacing:-.005em;line-height:1;
 }
+.btn:active{transform:scale(0.95)}
 .btn:focus-visible{outline:none;box-shadow:var(--ring)}
-.btn-p{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 1px 0 rgba(255,255,255,.08) inset}
-.btn-p:hover{background:var(--accent-hi);box-shadow:var(--shadow-glow)}
+.btn-p{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 1px 0 rgba(255,255,255,.15) inset, 0 4px 10px color-mix(in srgb, var(--accent) 30%, transparent)}
+.btn-p:hover{background:var(--accent-hi);box-shadow:0 1px 0 rgba(255,255,255,.2) inset, 0 6px 15px color-mix(in srgb, var(--accent) 45%, transparent); transform:translateY(-1px)}
 .btn-d{background:color-mix(in srgb, var(--red) 10%, transparent);color:var(--red);border-color:color-mix(in srgb, var(--red) 30%, var(--border))}
-.btn-d:hover{background:color-mix(in srgb, var(--red) 18%, transparent)}
+.btn-d:hover{background:color-mix(in srgb, var(--red) 18%, transparent); transform:translateY(-1px); box-shadow: 0 4px 10px color-mix(in srgb, var(--red) 20%, transparent)}
 .btn-g{background:transparent;color:var(--muted);border-color:var(--border-2)}
-.btn-g:hover{color:var(--text);background:var(--hover);border-color:var(--border-strong)}
+.btn-g:hover{color:var(--text);background:var(--hover);border-color:var(--border-strong); transform:translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1)}
 .btn-grn{background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green);border-color:color-mix(in srgb, var(--green) 30%, var(--border))}
 .btn-grn:hover{background:color-mix(in srgb, var(--green) 20%, transparent)}
 .btn-sm{padding:6px 10px;font-size:11px}
@@ -182,6 +201,9 @@ body{
 }
 .theme-btn:hover{color:var(--text);border-color:var(--border-strong)}
 .theme-btn svg{width:15px;height:15px}
+.lang-select{height:34px;background:var(--hover);border:1px solid var(--border-2);color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-family:var(--mono);outline:none;cursor:pointer}
+.lang-select:focus{border-color:var(--accent);box-shadow:var(--ring)}
+.lang-select option{background:var(--surf);color:var(--text)}
 .theme-btn .sun{display:none}
 .theme-btn .moon{display:block}
 [data-theme="light"] .theme-btn .sun{display:block}
@@ -244,11 +266,16 @@ body{
   border-radius:var(--radius-lg);
   padding:22px 24px 18px;
   position:relative;overflow:hidden;
-  backdrop-filter:blur(20px);
+  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--accent) 5%, transparent);
+  transition: box-shadow 0.4s ease, transform 0.4s ease;
+}
+.hero:hover{
+  box-shadow: 0 12px 48px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .hero::before{
   content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(600px 300px at 100% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%);
+  background:radial-gradient(800px 400px at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%);
 }
 .hero-head{
   display:flex;align-items:flex-start;justify-content:space-between;
@@ -319,9 +346,15 @@ body{
   background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:14px 16px 12px;
   position:relative;overflow:hidden;
-  transition:all var(--trans);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
-.kpi:hover{border-color:var(--border-strong)}
+.kpi:hover{
+  border-color:color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 12px 24px -8px rgba(0,0,0,0.4), 0 0 15px color-mix(in srgb, var(--accent) 15%, transparent);
+}
 .kpi-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .kpi-label{
   font-size:10.5px;font-weight:600;letter-spacing:.1em;
@@ -459,7 +492,7 @@ body{
 .sl{font-size:12px;color:var(--muted)}
 .sv{font-family:var(--mono);font-size:13.5px;font-weight:600}
 
-/* IPv6 inline */
+
 .ipv6-row{
   display:flex;align-items:center;gap:14px;
   padding:12px 14px;background:var(--surf-2);
@@ -625,7 +658,7 @@ body{
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
     </div>
     Firewall <span style="color:var(--muted);font-weight:500">L2/3/4</span>
-    <span class="ver">v2.0</span>
+    <span class="ver">v2.1</span>
   </div>
   <div class="vdiv"></div>
   <div id="sbadge" class="sbadge off"><div id="sdot" class="dot r"></div><span id="stxt">OFFLINE</span></div>
@@ -634,7 +667,7 @@ body{
   <div class="sp"></div>
   <span class="top-label">Interfaces</span>
   <div class="iface-wrap">
-    <input id="iface-in" class="iface-in" value="eth0,docker0" maxlength="80">
+    <input id="iface-in" class="iface-in" value="" placeholder="eth0" maxlength="80">
   </div>
   <button class="btn btn-p" onclick="applyRules()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
@@ -644,6 +677,7 @@ body{
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
     Stop
   </button>
+  <select id="lang-select" class="lang-select" onchange="setLang(this.value)" title="Sprache"><option value="de">DE</option><option value="en">EN</option></select>
   <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Theme wechseln">
     <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.78" y2="4.22"/></svg>
@@ -682,10 +716,10 @@ body{
 
 <div id="main">
 
-
+  
   <div id="s-dash" class="sec">
 
-
+    
     <div class="hero">
       <div class="hero-head">
         <div class="hero-title-block">
@@ -700,9 +734,9 @@ body{
           <div class="hero-stat pass"><span class="hl">Passed</span><span class="hv" id="hs-pass">0</span></div>
           <div class="hero-stat drop"><span class="hl">Dropped</span><span class="hv" id="hs-drop">0</span></div>
           <div class="time-range" role="tablist">
-            <button class="tr-btn ac" data-range="138">2m</button>
+            <button class="tr-btn ac" data-range="60">1m</button>
+            <button class="tr-btn" data-range="120">2m</button>
             <button class="tr-btn" data-range="300">5m</button>
-            <button class="tr-btn" data-range="900">15m</button>
           </div>
         </div>
       </div>
@@ -716,7 +750,7 @@ body{
       </div>
     </div>
 
-
+    
     <div class="kpi-row">
       <div class="kpi blue">
         <div class="kpi-head">
@@ -768,17 +802,22 @@ body{
       </div>
     </div>
 
-
+    
     <details class="pane" open>
       <summary>
         <div class="pane-title-wrap">
           <div class="pane-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
           <div>
             <div class="pane-title">Protokoll-Verteilung</div>
-            <div class="pane-sub">Live Breakdown TCP / UDP / ICMP</div>
+            <div class="pane-sub">Live Breakdown TCP / UDP / ICMP — aus BPF-Counters</div>
           </div>
         </div>
         <div class="pane-right">
+          <div class="range-seg" id="proto-scope-seg" onclick="event.stopPropagation()">
+            <button class="range-btn"        data-scope="total"   onclick="event.stopPropagation();setProtoScope('total')">Gesamt</button>
+            <button class="range-btn active" data-scope="ingress" onclick="event.stopPropagation();setProtoScope('ingress')">Rein</button>
+            <button class="range-btn"        data-scope="egress"  onclick="event.stopPropagation();setProtoScope('egress')">Raus</button>
+          </div>
           <span class="pane-badge" id="proto-total-badge">0 Pakete</span>
           <span class="pane-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="6 9 12 15 18 9"/></svg></span>
         </div>
@@ -788,51 +827,50 @@ body{
           <div class="donut-wrap">
             <svg viewBox="0 0 120 120" id="donut-svg">
               <circle cx="60" cy="60" r="48" fill="none" stroke="var(--border)" stroke-width="12"/>
-              <circle id="donut-tcp" class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--red)" stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
-              <circle id="donut-udp" class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--purple)" stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
-              <circle id="donut-icmp" class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--amber)" stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
-              <circle id="donut-other" class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--dim)" stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
+              <circle id="donut-tcp"   class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--red)"    stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
+              <circle id="donut-udp"   class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--purple)" stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
+              <circle id="donut-icmp"  class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--amber)"  stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
+              <circle id="donut-other" class="seg" cx="60" cy="60" r="48" fill="none" stroke="var(--dim)"    stroke-width="12" stroke-dasharray="0 301.6" stroke-dashoffset="0" stroke-linecap="butt"/>
             </svg>
             <div class="donut-center">
               <span class="big" id="donut-big">0</span>
-              <span class="lbl">Pakete</span>
+              <span class="lbl" id="donut-lbl">Pakete</span>
             </div>
           </div>
           <div class="proto-list">
             <div class="proto-item">
               <span class="proto-swatch" style="background:var(--red)"></span>
-              <div><div class="proto-name">TCP</div><div class="proto-sub">Stateful · Conntrack</div></div>
+              <div><div class="proto-name">TCP</div><div class="proto-sub" id="proto-tcp-sub">Pass / Drop</div></div>
               <span class="proto-count" id="proto-tcp-count">0</span>
               <span class="proto-pct" id="proto-tcp-pct">0%</span>
             </div>
             <div class="proto-item">
               <span class="proto-swatch" style="background:var(--purple)"></span>
-              <div><div class="proto-name">UDP</div><div class="proto-sub">Stateful · Conntrack</div></div>
+              <div><div class="proto-name">UDP</div><div class="proto-sub" id="proto-udp-sub">Pass / Drop</div></div>
               <span class="proto-count" id="proto-udp-count">0</span>
               <span class="proto-pct" id="proto-udp-pct">0%</span>
             </div>
             <div class="proto-item">
               <span class="proto-swatch" style="background:var(--amber)"></span>
-              <div><div class="proto-name">ICMP</div><div class="proto-sub">Ping / Error messages</div></div>
+              <div><div class="proto-name">ICMP</div><div class="proto-sub" id="proto-icmp-sub">Ping / Error</div></div>
               <span class="proto-count" id="proto-icmp-count">0</span>
               <span class="proto-pct" id="proto-icmp-pct">0%</span>
             </div>
             <div class="proto-item">
               <span class="proto-swatch" style="background:var(--dim)"></span>
-              <div><div class="proto-name">Sonstige</div><div class="proto-sub">Ungetrackt / Andere L4</div></div>
+              <div><div class="proto-name">Sonstige</div><div class="proto-sub" id="proto-other-sub">Andere L4 (SCTP, GRE, …)</div></div>
               <span class="proto-count" id="proto-other-count">0</span>
               <span class="proto-pct" id="proto-other-pct">0%</span>
             </div>
-            <div class="proto-note">
-              TCP/UDP-Anteile aus Conntrack abgeleitet (ct_passed + ct_tracked). ICMP aus dediziertem Counter.
-              Sonstige = nicht klassifizierte Pakete (z.B. SCTP, GRE, nicht-getrackte Protokolle).
+            <div class="proto-note" id="proto-note">
+              Echte Counter aus BPF. Umschaltung: Gesamt = ein+aus, Rein = Ingress (pass+drop), Raus = Egress (pass-only aus tc_egress).
             </div>
           </div>
         </div>
       </div>
     </details>
 
-
+    
     <details class="pane">
       <summary>
         <div class="pane-title-wrap">
@@ -865,7 +903,7 @@ body{
       </div>
     </details>
 
-
+    
     <details class="pane">
       <summary>
         <div class="pane-title-wrap">
@@ -893,7 +931,7 @@ body{
       </div>
     </details>
 
-
+    
     <details class="pane">
       <summary>
         <div class="pane-title-wrap">
@@ -919,8 +957,8 @@ body{
       </div>
     </details>
 
-
-    <details class="pane" open>
+    
+    <details class="pane">
       <summary>
         <div class="pane-title-wrap">
           <div class="pane-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11H7a4 4 0 0 1 0-8h4v1"/><path d="M15 13h2a4 4 0 0 1 0 8h-4v-1"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
@@ -940,7 +978,7 @@ body{
     </details>
   </div>
 
-
+  
   <div id="s-rules" class="sec" style="display:none">
     <div class="card">
       <div class="ch"><span class="ct"><span class="strong">Firewall-Regeln</span></span>
@@ -950,12 +988,12 @@ body{
         </div>
       </div>
       <div style="overflow-x:auto">
-        <table class="rt"><thead><tr><th style="width:30px"></th><th>Aktion</th><th>Richtung</th><th>Quelle</th><th>Proto</th><th>Port</th><th>Rate Limit</th><th>Kommentar</th><th style="width:100px"></th></tr></thead><tbody id="rules-tbody"></tbody></table>
+        <table class="rt"><thead><tr><th style="width:30px"></th><th>Aktion</th><th>Richtung</th><th>Quelle</th><th>Proto</th><th>Port</th><th>Rate Limit</th><th>Kommentar</th><th style="text-align:right;white-space:nowrap">Treffer</th><th style="width:100px"></th></tr></thead><tbody id="rules-tbody"></tbody></table>
       </div>
     </div>
   </div>
 
-  <!-- LOG -->
+  
   <div id="s-log" class="sec" style="display:none">
     <div class="card"><div class="ch"><span class="ct"><span class="strong">Systemlog</span></span><button class="btn btn-g btn-sm" onclick="document.getElementById('logbox').innerHTML=''">Clear</button></div><div id="logbox"></div></div>
   </div>
@@ -1001,13 +1039,16 @@ var _origFetch=window.fetch;
 window.fetch=function(url,opts){opts=opts||{};opts.credentials='include';opts.headers=opts.headers||{};return _origFetch(url,opts).then(function(r){if(r.status===401){location.href='/login';throw new Error('Nicht autorisiert')}return r})};
 
 var spd = {total:Array(60).fill(0), pass:Array(60).fill(0), drop:Array(60).fill(0)};
-var chartData = {pass:[], drop:[]};
-var CHART_LEN = 138;
+var CHART_LEN = 60;
+var chartData = {pass:Array(CHART_LEN).fill(null), drop:Array(CHART_LEN).fill(null)};
 var chartHoverIdx = -1;
 var lastStats = null;
+var lastHitRefresh = 0;
 var prevRaw = null;          
 var prevRawTime = 0;
-var tcpUdpRate = 0;       
+var tcpUdpRate = 0;          
+var ifaceTouched = false;
+var ifaceHydrated = false;
 
 var TYPES=[{key:'filter',label:'FILTER'},{key:'ratelimit',label:'RATE LIMIT'},{key:'ip_ratelimit',label:'IP RATE LIMIT'},{key:'forward',label:'FORWARD'},{key:'dns',label:'DNS'},{key:'established',label:'CONNTRACK'},{key:'conn_timeout',label:'CONN TIMEOUT'}];
 
@@ -1031,6 +1072,44 @@ function toggleTheme(){
   }
 })();
 
+var currentLang = 'de';
+var I18N = {
+  de:{now:'jetzt',waitingData:'Warte auf Daten...',saved:'Speichern',stop:'Stop',interfaces:'Interfaces',navigation:'Navigation',dashboard:'Dashboard',rules:'Regeln',log:'Log',templates:'Vorlagen',logout:'Abmelden',liveTraffic:'Live Traffic',liveSub:'Real-time packets per second',totalPps:'Total PPS',passed:'Passed',dropped:'Dropped',totalPpsKpi:'Gesamt PPS',passPpsKpi:'Erlaubt PPS',dropPpsKpi:'Geblockt PPS',rateLimited:'Rate-Limited',ctPassed:'CT Passed',activeRules:'Aktive Regeln',inKernel:'In Kernel geladen',protocolDistribution:'Protokoll-Verteilung',protocolSub:'Live Breakdown TCP / UDP / ICMP — aus BPF-Counters',dropAnalysis:'Drop-Analyse',dropSub:'Grund für geblockte Pakete',detailCounters:'Detail-Zähler',detailSub:'Gesamtwerte seit XDP-Load',networkPolicy:'Netzwerk-Policy',ipv6Behavior:'IPv6 Verhalten',activeRulesSub:'Quick-View · zeigt die ersten 8',showAll:'Alle anzeigen',firewallRules:'Firewall-Regeln',search:'Suchen...',newRule:'+ Neue Regel',systemLog:'Systemlog',clear:'Clear',action:'Aktion',direction:'Richtung',source:'Quelle',proto:'Proto',port:'Port',rateLimit:'Rate Limit',comment:'Kommentar',hits:'Treffer',emptyRules:'Keine Regeln',more:'weitere',packetsTotal:'Pakete gesamt',packetsIn:'Pakete rein',packetsOut:'Pakete raus',pass:'Pass',drop:'Drop',allowed:'Erlaubt',blocked:'Blockiert',offline:'offline',xdpActive:'XDP aktiv',packetsSecond:'Packets per second',applyStart:'Anwende Regeln auf ',applying:'Anwenden...',error:'Fehler: ',ready:'XDP Firewall v2.1 · Pro Dashboard bereit'},
+  en:{now:'now',waitingData:'Waiting for data...',saved:'Save',stop:'Stop',interfaces:'Interfaces',navigation:'Navigation',dashboard:'Dashboard',rules:'Rules',log:'Log',templates:'Templates',logout:'Log out',liveTraffic:'Live traffic',liveSub:'Real-time packets per second',totalPps:'Total PPS',passed:'Passed',dropped:'Dropped',totalPpsKpi:'Total PPS',passPpsKpi:'Allowed PPS',dropPpsKpi:'Blocked PPS',rateLimited:'Rate-limited',ctPassed:'CT passed',activeRules:'Active rules',inKernel:'Loaded in kernel',protocolDistribution:'Protocol distribution',protocolSub:'Live breakdown TCP / UDP / ICMP from BPF counters',dropAnalysis:'Drop analysis',dropSub:'Reasons for blocked packets',detailCounters:'Detailed counters',detailSub:'Totals since XDP load',networkPolicy:'Network policy',ipv6Behavior:'IPv6 behavior',activeRulesSub:'Quick view · first 8 rules',showAll:'Show all',firewallRules:'Firewall rules',search:'Search...',newRule:'+ New rule',systemLog:'System log',clear:'Clear',action:'Action',direction:'Direction',source:'Source',proto:'Proto',port:'Port',rateLimit:'Rate limit',comment:'Comment',hits:'Hits',emptyRules:'No rules',more:'more',packetsTotal:'total packets',packetsIn:'in packets',packetsOut:'out packets',pass:'Pass',drop:'Drop',allowed:'Allowed',blocked:'Blocked',offline:'offline',xdpActive:'XDP active',packetsSecond:'Packets per second',applyStart:'Applying rules to ',applying:'Applying...',error:'Error: ',ready:'XDP Firewall v2.1 · evything online'}
+};
+function t(k){return (I18N[currentLang] && I18N[currentLang][k]) || I18N.de[k] || k;}
+function setTextBySelector(sel, val){var el=document.querySelector(sel);if(el)el.textContent=val;}
+function setAllTextBySelector(sel, val){document.querySelectorAll(sel).forEach(function(el){el.textContent=val;});}
+function setLang(lang){
+  currentLang = lang === 'en' ? 'en' : 'de';
+  try{localStorage.setItem('fw-lang', currentLang);}catch(e){}
+  document.documentElement.lang = currentLang;
+  var ls=document.getElementById('lang-select'); if(ls) ls.value=currentLang;
+  var topLabels=document.querySelectorAll('.top-label'); if(topLabels[0]) topLabels[0].textContent=t('interfaces');
+  var saveBtn=document.querySelector('#topbar .btn-p'); if(saveBtn) saveBtn.lastChild.nodeValue=' '+t('saved');
+  var stopBtn=document.querySelector('#topbar .btn-d'); if(stopBtn) stopBtn.lastChild.nodeValue=' '+t('stop');
+  var ns=document.querySelectorAll('.ns'); if(ns[0])ns[0].textContent=t('navigation'); if(ns[1])ns[1].textContent=t('templates');
+  var nd=document.getElementById('ni-dash'); if(nd) nd.childNodes[1].nodeValue=t('dashboard');
+  var nr=document.getElementById('ni-rules'); if(nr) nr.childNodes[1].nodeValue=t('rules');
+  var nl=document.getElementById('ni-log'); if(nl) nl.childNodes[1].nodeValue=t('log');
+  var out=document.querySelector('.sf button'); if(out) out.textContent=t('logout');
+  var hero=document.querySelector('.hero-title'); if(hero){var live=hero.querySelector('.live');hero.textContent=t('liveTraffic')+' ';if(live){hero.appendChild(live);live.lastChild.nodeValue='LIVE';}}
+  var hs=document.querySelectorAll('.hero-stat .hl'); if(hs[0])hs[0].textContent=t('totalPps'); if(hs[1])hs[1].textContent=t('passed'); if(hs[2])hs[2].textContent=t('dropped');
+  var k=document.querySelectorAll('.kpi-label'); if(k[0])k[0].textContent=t('totalPpsKpi'); if(k[1])k[1].textContent=t('passPpsKpi'); if(k[2])k[2].textContent=t('dropPpsKpi'); if(k[3])k[3].textContent=t('rateLimited'); if(k[4])k[4].textContent=t('ctPassed'); if(k[5])k[5].textContent=t('activeRules');
+  var km=document.querySelectorAll('.kpi-meta'); if(km[2])km[2].textContent=t('inKernel');
+  var pt=document.querySelectorAll('.pane-title'); if(pt[0])pt[0].textContent=t('protocolDistribution'); if(pt[1])pt[1].textContent=t('dropAnalysis'); if(pt[2])pt[2].textContent=t('detailCounters'); if(pt[3])pt[3].textContent=t('networkPolicy'); if(pt[4])pt[4].textContent=t('activeRules');
+  var ps=document.querySelectorAll('.pane-sub'); if(ps[0])ps[0].textContent=t('protocolSub'); if(ps[1])ps[1].textContent=t('dropSub'); if(ps[2])ps[2].textContent=t('detailSub'); if(ps[3])ps[3].textContent=t('ipv6Behavior'); if(ps[4])ps[4].textContent=t('activeRulesSub');
+  var showBtn=document.querySelector('.pane-right .btn-sm'); if(showBtn) showBtn.textContent=t('showAll');
+  var strong=document.querySelector('#s-rules .strong'); if(strong) strong.textContent=t('firewallRules');
+  var search=document.getElementById('rule-search'); if(search) search.placeholder=t('search');
+  var newBtn=document.querySelector('#s-rules .btn-grn'); if(newBtn)newBtn.textContent=t('newRule');
+  var logTitle=document.querySelector('#s-log .strong'); if(logTitle)logTitle.textContent=t('systemLog');
+  var clearBtn=document.querySelector('#s-log .btn-sm'); if(clearBtn)clearBtn.textContent=t('clear');
+  filterRules();
+  if(lastStats) updateStats(lastStats);
+  drawTrafficChart();
+}
+(function initLang(){var saved=null;try{saved=localStorage.getItem('fw-lang')}catch(e){};setLang(saved==='en'?'en':'de');})();
 
 function toast(m,t){var el=document.getElementById('toast');el.textContent=m;el.className='show '+(t||'ok');clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove('show')},3000)}
 function log(m,c){var el=document.getElementById('logbox');var d=document.createElement('div');d.className=c||'linf';d.textContent='['+new Date().toLocaleTimeString('de-DE',{hour12:false})+'] '+m;el.appendChild(d);el.scrollTop=el.scrollHeight}
@@ -1062,9 +1141,17 @@ else if(t==='ip_ratelimit'){tb='<span class="badge b-iprl">IP RL</span>';src='<c
 else if(t==='dns'){tb='<span class="badge b-dns">DNS</span>';proto='<span class="badge b-udp">UDP:53</span>';port='<span style="font-size:10px;color:var(--muted)">'+escHtml(r.value||'both')+'</span>';dir=dirBadge('both')}
 else if(t==='forward'){tb='<span class="badge b-fwd">FWD</span>';proto=protoBadge(r.protocol);port='<code style="font-family:var(--mono);font-size:11px">'+escHtml(r.dst_port||'?')+' → '+escHtml(r.forward_ip||'?')+':'+escHtml(r.forward_port||'?')+'</code>';dir=dirBadge('inbound')}
 var id=r.id||'';
-return'<tr class="'+(en?'':'disabled-row')+'"><td><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" '+(en?'checked':'')+' onchange="toggleRule(\''+id+'\')"><span></span></label></td><td>'+tb+'</td><td>'+dir+'</td><td>'+src+'</td><td>'+proto+'</td><td>'+port+'</td><td>'+rl+'</td><td style="color:var(--muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">'+escHtml(r.comment||'')+'</td><td><div class="row-actions"><button class="icon-btn" onclick="openModal(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn" onclick="dupRule(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="icon-btn del" onclick="delRule(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>'}
-function filterRules(){var q=(document.getElementById('rule-search').value||'').toLowerCase();var tbody=document.getElementById('rules-tbody');var f=allRules.filter(function(r){if(!q)return true;return[r.comment,r.src,r.dst_port,r.protocol,r.type,r.action,r.direction,r.id,r.value].join(' ').toLowerCase().indexOf(q)!==-1});tbody.innerHTML=f.length?f.map(renderRow).join(''):'<tr><td colspan="9"><div class="empty"><p>Keine Regeln</p></div></td></tr>'}
-function loadRules(){fetch(API+'/rules').then(function(r){return r.json()}).then(function(rules){allRules=rules;filterRules();document.getElementById('m-rules').textContent=rules.length;var dr=document.getElementById('dash-rules');if(!rules.length){dr.innerHTML='<div class="empty"><p>Keine Regeln</p></div>';return}dr.innerHTML='<table class="rt"><thead><tr><th style="padding-left:18px">Aktion</th><th>Richtung</th><th>Src</th><th>Proto</th><th>Port</th><th>Kommentar</th></tr></thead><tbody>'+rules.slice(0,8).map(function(r){var t=r.type||'filter',b='';if(t==='filter'){var a=r.action||'allow';b='<span class="badge '+(a==='allow'?'b-allow':'b-block')+'">'+(a==='allow'?'ALLOW':'BLOCK')+'</span>'}else if(t==='established')b='<span class="badge b-est">CT</span>';else if(t==='ratelimit')b='<span class="badge b-rl">RL</span>';else if(t==='dns')b='<span class="badge b-dns">DNS</span>';else if(t==='forward')b='<span class="badge b-fwd">FWD</span>';else if(t==='ip_ratelimit')b='<span class="badge b-iprl">IPRL</span>';else if(t==='conn_timeout')b='<span class="badge b-rl">TO</span>';var op=r.enabled!==false?'':'style="opacity:.4"';return'<tr '+op+'><td style="padding-left:18px">'+b+'</td><td>'+dirBadge(r.direction||'inbound')+'</td><td style="font-family:var(--mono);font-size:11px">'+escHtml(r.src||'—')+'</td><td>'+protoBadge(r.protocol)+'</td><td style="font-family:var(--mono);font-size:11px">'+escHtml(r.dst_port||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+escHtml(r.comment||'')+'</td></tr>'}).join('')+'</tbody></table>'+(rules.length>8?'<div style="padding:10px 18px;font-size:11px;color:var(--dim)">+ '+(rules.length-8)+' weitere</div>':'')}).catch(function(){})}
+var hits = (typeof r.hit_count === 'number') ? r.hit_count : 0;
+var passHits = (typeof r.hit_pass_count === 'number') ? r.hit_pass_count : 0;
+var dropHits = (typeof r.hit_drop_count === 'number') ? r.hit_drop_count : 0;
+var showSplit = hits > 0 && (passHits > 0 || dropHits > 0) && (dropHits > 0 || r.rate_limit || r.per_ip_limit || (r.action||'') === 'block' || t === 'ratelimit' || t === 'ip_ratelimit');
+var hitsHtml = hits > 0 ? fmtInt(hits) : '—';
+if(showSplit){hitsHtml += '<div style="margin-top:3px;font-size:9.5px;color:var(--muted);white-space:nowrap">' + fmtInt(passHits) + ' pass · ' + fmtInt(dropHits) + ' drop</div>'}
+var hitsCell = '<td style="text-align:right;font-family:var(--mono);font-size:11px;color:' + (hits>0 ? 'var(--text)' : 'var(--dim)') + '">' + hitsHtml + '</td>';
+return'<tr class="'+(en?'':'disabled-row')+'"><td><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" '+(en?'checked':'')+' onchange="toggleRule(\''+id+'\')"><span></span></label></td><td>'+tb+'</td><td>'+dir+'</td><td>'+src+'</td><td>'+proto+'</td><td>'+port+'</td><td>'+rl+'</td><td style="color:var(--muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">'+escHtml(r.comment||'')+'</td>'+hitsCell+'<td><div class="row-actions"><button class="icon-btn" onclick="openModal(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn" onclick="dupRule(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="icon-btn del" onclick="delRule(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>'}
+function filterRules(){var q=(document.getElementById('rule-search').value||'').toLowerCase();var tbody=document.getElementById('rules-tbody');var f=allRules.filter(function(r){if(!q)return true;return[r.comment,r.src,r.dst_port,r.protocol,r.type,r.action,r.direction,r.id,r.value].join(' ').toLowerCase().indexOf(q)!==-1});tbody.innerHTML=f.length?f.map(renderRow).join(''):'<tr><td colspan="10"><div class="empty"><p>'+t('emptyRules')+'</p></div></td></tr>'}
+function loadRules(){fetch(API+'/rules').then(function(r){return r.json()}).then(function(rules){allRules=rules;filterRules();document.getElementById('m-rules').textContent=rules.length;var dr=document.getElementById('dash-rules');if(!rules.length){dr.innerHTML='<div class="empty"><p>'+t('emptyRules')+'</p></div>';return}dr.innerHTML='<table class="rt"><thead><tr><th style="padding-left:18px">Aktion</th><th>Richtung</th><th>Src</th><th>Proto</th><th>Port</th><th>Kommentar</th></tr></thead><tbody>'+rules.slice(0,8).map(function(r){var t=r.type||'filter',b='';if(t==='filter'){var a=r.action||'allow';b='<span class="badge '+(a==='allow'?'b-allow':'b-block')+'">'+(a==='allow'?'ALLOW':'BLOCK')+'</span>'}else if(t==='established')b='<span class="badge b-est">CT</span>';else if(t==='ratelimit')b='<span class="badge b-rl">RL</span>';else if(t==='dns')b='<span class="badge b-dns">DNS</span>';else if(t==='forward')b='<span class="badge b-fwd">FWD</span>';else if(t==='ip_ratelimit')b='<span class="badge b-iprl">IPRL</span>';else if(t==='conn_timeout')b='<span class="badge b-rl">TO</span>';var op=r.enabled!==false?'':'style="opacity:.4"';return'<tr '+op+'><td style="padding-left:18px">'+b+'</td><td>'+dirBadge(r.direction||'inbound')+'</td><td style="font-family:var(--mono);font-size:11px">'+escHtml(r.src||'—')+'</td><td>'+protoBadge(r.protocol)+'</td><td style="font-family:var(--mono);font-size:11px">'+escHtml(r.dst_port||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+escHtml(r.comment||'')+'</td></tr>'}).join('')+'</tbody></table>'+(rules.length>8?'<div style="padding:10px 18px;font-size:11px;color:var(--dim)">+ '+(rules.length-8)+' '+t('more')+'</div>':'')}).catch(function(){})}
+function refreshRuleHits(){fetch(API+'/rule-hits').then(function(r){return r.json()}).then(function(j){var h=j.hits||{};allRules.forEach(function(r){var id=r.id||'',c=h[id];if(typeof c==='number'){r.hit_count=c;r.hit_pass_count=0;r.hit_drop_count=0}else if(c&&typeof c==='object'){r.hit_count=parseInt(c.total||0);r.hit_pass_count=parseInt(c.pass||0);r.hit_drop_count=parseInt(c.drop||0)}else{r.hit_count=0;r.hit_pass_count=0;r.hit_drop_count=0}});var rs=document.getElementById('s-rules');if(rs&&rs.style.display!=='none')filterRules()}).catch(function(){})}
 function toggleRule(id){fetch(API+'/rules/'+id+'/toggle',{method:'PATCH'}).then(function(r){return r.json()}).then(function(j){toast(j.enabled?'Aktiviert':'Deaktiviert','ok');loadRules()}).catch(function(e){toast(e.message,'err')})}
 function dupRule(id){fetch(API+'/rules/'+id+'/duplicate',{method:'POST'}).then(function(r){return r.json()}).then(function(){toast('Dupliziert','ok');loadRules()}).catch(function(e){toast(e.message,'err')})}
 function delRule(id){if(!confirm('Löschen?'))return;fetch(API+'/rules/'+id,{method:'DELETE'}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.detail)});return r.json()}).then(function(){toast('Gelöscht','ok');loadRules()}).catch(function(e){toast(e.message,'err')})}
@@ -1085,9 +1172,11 @@ function quickDns(d){postRule({type:'dns',value:d,comment:'DNS erlauben',enabled
 function quickEstablished(){postRule({type:'established',comment:'Conntrack',enabled:true,priority:100})}
 function quickConnTimeout(s){postRule({type:'conn_timeout',value:s,comment:'Timeout '+s+'s',enabled:true,priority:100})}
 function postRule(body){fetch(API+'/rules',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.detail)});return r.json()}).then(function(){log('+ '+(body.comment||body.type),'lok');toast((body.comment||body.type)+' hinzugefügt','ok');loadRules()}).catch(function(e){toast(e.message,'err')})}
-function applyRules(){var iface=document.getElementById('iface-in').value.trim()||'eth0';log('Anwende Regeln auf '+iface+'...','linf');toast('Anwenden...','ok');fetch(API+'/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({iface:iface})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.detail);return j})}).then(function(j){log(j.message,'lok');toast(j.message,'ok')}).catch(function(e){log('Fehler: '+e.message,'lerr');toast(e.message,'err')})}
+function lastConfiguredIface(){return (lastStats && (lastStats.configured_iface || lastStats.iface)) || ''}
+function hydrateIfaceInput(d){var el=document.getElementById('iface-in');if(!el)return;var val=(d && (d.configured_iface || d.iface)) || '';if(!val)return;if(!ifaceHydrated || (!ifaceTouched && el.value.trim()!==val)){el.value=val;ifaceHydrated=true}}
+function applyRules(){var ifaceEl=document.getElementById('iface-in');var iface=ifaceEl.value.trim()||lastConfiguredIface()||'eth0';ifaceEl.value=iface;ifaceTouched=false;log(t('applyStart')+iface+'...','linf');toast(t('applying'),'ok');fetch(API+'/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({iface:iface})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.detail);return j})}).then(function(j){if(j.configured_iface){ifaceEl.value=j.configured_iface;ifaceHydrated=true}log(j.message,'lok');toast(j.message,'ok')}).catch(function(e){log(t('error')+e.message,'lerr');toast(e.message,'err')})}
 function detach(){fetch(API+'/detach',{method:'POST'}).then(function(r){return r.json()}).then(function(j){log(j.message,'ldim');toast(j.message,'ok')}).catch(function(e){toast(e.message,'err')})}
-function toggleIPv6(){var allow=document.getElementById('ipv6-toggle').checked;fetch(API+'/ipv6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({allow:allow})}).then(function(r){return r.json()}).then(function(j){document.getElementById('ipv6-status-txt').textContent=j.ipv6_allow?'Erlaubt':'Blockiert';document.getElementById('ipv6-status').textContent=j.ipv6_allow?'Erlaubt':'Blockiert';toast('IPv6 '+(j.ipv6_allow?'erlaubt':'blockiert'),'ok')}).catch(function(e){toast(e.message,'err')})}
+function toggleIPv6(){var allow=document.getElementById('ipv6-toggle').checked;fetch(API+'/ipv6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({allow:allow})}).then(function(r){return r.json()}).then(function(j){document.getElementById('ipv6-status-txt').textContent=j.ipv6_allow?t('allowed'):t('blocked');document.getElementById('ipv6-status').textContent=j.ipv6_allow?t('allowed'):t('blocked');toast('IPv6 '+(j.ipv6_allow?t('allowed'):t('blocked')),'ok')}).catch(function(e){toast(e.message,'err')})}
 function doLogout(){fetch(API+'/logout',{method:'POST'}).then(function(){location.href='/login'}).catch(function(){location.href='/login'})}
 
 
@@ -1095,17 +1184,36 @@ document.querySelectorAll('.tr-btn').forEach(function(b){
   b.onclick = function(){
     document.querySelectorAll('.tr-btn').forEach(function(x){ x.classList.remove('ac'); });
     b.classList.add('ac');
-    CHART_LEN = parseInt(b.getAttribute('data-range'))||138;
-    while(chartData.pass.length > CHART_LEN) chartData.pass.shift();
-    while(chartData.drop.length > CHART_LEN) chartData.drop.shift();
+    resizeChart(parseInt(b.getAttribute('data-range'))||60);
     drawTrafficChart();
   };
 });
 
-
+function normalizePoint(v){
+  v = Number(v);
+  return isFinite(v) ? v : null;
+}
+function fitSeriesRight(arr, len){
+  arr = (arr || []).map(normalizePoint).filter(function(v){return v !== null;});
+  if(arr.length > len) arr = arr.slice(arr.length - len);
+  while(arr.length < len) arr.unshift(null);
+  return arr;
+}
+function resizeChart(len){
+  CHART_LEN = len;
+  chartData.pass = fitSeriesRight(chartData.pass, CHART_LEN);
+  chartData.drop = fitSeriesRight(chartData.drop, CHART_LEN);
+}
+function setChartHistory(history){
+  var pass = (history || []).map(function(h){return h.pass_pps || 0;});
+  var drop = (history || []).map(function(h){return h.drop_pps || 0;});
+  chartData.pass = fitSeriesRight(pass, CHART_LEN);
+  chartData.drop = fitSeriesRight(drop, CHART_LEN);
+}
 function pushChart(pp,dp){
-  chartData.pass.push(pp||0);
-  chartData.drop.push(dp||0);
+  if(chartData.pass.length !== CHART_LEN) resizeChart(CHART_LEN);
+  chartData.pass.push(normalizePoint(pp) || 0);
+  chartData.drop.push(normalizePoint(dp) || 0);
   while(chartData.pass.length > CHART_LEN) chartData.pass.shift();
   while(chartData.drop.length > CHART_LEN) chartData.drop.shift();
   drawTrafficChart();
@@ -1115,9 +1223,11 @@ function fmtAxis(v){ if(v>=1000000) return (v/1000000).toFixed(1)+'M'; if(v>=100
 function computePts(arr, W, H, padL, padT, mx){
   var a=[], N=arr.length;
   for(var i=0; i<N; i++){
-    var x = padL + (i/(Math.max(1,CHART_LEN-1)))*W;
-    var y = padT + H - (Math.min(arr[i],mx)/mx)*H;
-    a.push({x:x,y:y});
+    var val = arr[i];
+    if(val === null || typeof val === 'undefined' || isNaN(val)) continue;
+    var x = padL + (i/(Math.max(1,N-1)))*W;
+    var y = padT + H - (Math.min(val,mx)/mx)*H;
+    a.push({x:x,y:y,idx:i});
   }
   return a;
 }
@@ -1136,19 +1246,19 @@ function drawTrafficChart(){
   var padL=52, padR=14, padT=12, padB=28;
   var W = cssW - padL - padR, H = cssH - padT - padB;
 
- 
+  
   var gridCol = getVar('--grid-color') || 'rgba(128,128,128,.1)';
   var muteCol = getVar('--muted') || '#7a7a88';
   var green = getVar('--green') || '#2dd4a0';
   var red = getVar('--red') || '#f05252';
 
-
+  
   var mx = 0;
-  for(var i=0; i<chartData.pass.length; i++) if(chartData.pass[i]>mx) mx = chartData.pass[i];
-  for(var i=0; i<chartData.drop.length; i++) if(chartData.drop[i]>mx) mx = chartData.drop[i];
+  for(var i=0; i<chartData.pass.length; i++) if(chartData.pass[i] !== null && chartData.pass[i]>mx) mx = chartData.pass[i];
+  for(var i=0; i<chartData.drop.length; i++) if(chartData.drop[i] !== null && chartData.drop[i]>mx) mx = chartData.drop[i];
   mx = niceScale(Math.max(mx,10));
 
-
+  
   ctx.font = '10.5px "JetBrains Mono", monospace';
   ctx.strokeStyle = gridCol;
   ctx.lineWidth = 1;
@@ -1165,34 +1275,34 @@ function drawTrafficChart(){
     ctx.fillText(fmtAxis(v), padL-8, y);
   }
 
-
-  var xLabels = [0, Math.floor(CHART_LEN*0.2), Math.floor(CHART_LEN*0.4), Math.floor(CHART_LEN*0.6), Math.floor(CHART_LEN*0.8), CHART_LEN-1];
+  
+  var xIdx = [0, Math.floor((CHART_LEN-1)*0.2), Math.floor((CHART_LEN-1)*0.4), Math.floor((CHART_LEN-1)*0.6), Math.floor((CHART_LEN-1)*0.8), CHART_LEN-1];
   ctx.fillStyle = muteCol;
   ctx.textBaseline = 'top';
-  for(var i=0; i<xLabels.length; i++){
-    var idx = xLabels[i];
+  for(var i=0; i<xIdx.length; i++){
+    var idx = xIdx[i];
+    var age = CHART_LEN - 1 - idx;
     var x = padL + (idx/(Math.max(1,CHART_LEN-1)))*W;
-    var sec = -(CHART_LEN-1-idx);
-    var lbl = sec === 0 ? 'now' : (sec+'s');
+    var lbl = age === 0 ? t('now') : ('-'+age+'s');
     if(i===0) ctx.textAlign='left';
-    else if(i===xLabels.length-1) ctx.textAlign='right';
+    else if(i===xIdx.length-1) ctx.textAlign='right';
     else ctx.textAlign='center';
     ctx.fillText(lbl, x, padT+H+10);
   }
 
-
-  var n = Math.max(chartData.pass.length, chartData.drop.length);
+  
+  var n = chartData.pass.filter(function(v){return v !== null;}).length + chartData.drop.filter(function(v){return v !== null;}).length;
   if(n < 2){
     ctx.textAlign='center';
     ctx.fillStyle = muteCol;
-    ctx.fillText('Warte auf Daten...', padL+W/2, padT+H/2);
+    ctx.fillText(t('waitingData'), padL+W/2, padT+H/2);
     return;
   }
 
-
+  
   function drawSmooth(points, color, fillOpa){
     if(points.length < 2) return;
-
+    
     ctx.beginPath();
     ctx.moveTo(points[0].x, padT+H);
     ctx.lineTo(points[0].x, points[0].y);
@@ -1215,7 +1325,7 @@ function drawTrafficChart(){
     ctx.fillStyle = grad;
     ctx.fill();
 
-
+    
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for(var i=0; i<points.length-1; i++){
@@ -1253,9 +1363,10 @@ function drawTrafficChart(){
     ctx.stroke();
     ctx.setLineDash([]);
 
-
-    var py = passPts[chartHoverIdx].y;
-    var dy = dropPts[chartHoverIdx].y;
+    
+    function yFor(v){return padT + H - (Math.min(v || 0,mx)/mx)*H;}
+    var py = yFor(chartData.pass[chartHoverIdx]);
+    var dy = yFor(chartData.drop[chartHoverIdx]);
     [[hx,py,green],[hx,dy,red]].forEach(function(pt){
       ctx.beginPath();
       ctx.fillStyle = getVar('--card-solid') || '#171722';
@@ -1283,11 +1394,15 @@ function drawTrafficChart(){
     }
     var rel = (x - padL) / W;
     var idx = Math.round(rel * (CHART_LEN - 1));
-    if(idx < 0) idx = 0; if(idx > chartData.pass.length - 1) idx = chartData.pass.length - 1;
+    if(idx < 0) idx = 0;
+    if(idx > CHART_LEN - 1) idx = CHART_LEN - 1;
+    if(chartData.pass[idx] === null && chartData.drop[idx] === null){
+      chartHoverIdx = -1; tt.style.opacity = 0; drawTrafficChart(); return;
+    }
     if(idx === chartHoverIdx) return;
     chartHoverIdx = idx;
-    var sec = -(CHART_LEN - 1 - idx);
-    document.getElementById('tt-time').textContent = sec === 0 ? 'jetzt' : (sec + 's');
+    var sec = idx - (CHART_LEN - 1);
+    document.getElementById('tt-time').textContent = sec === 0 ? t('now') : (sec + 's');
     document.getElementById('tt-pass').textContent = fmtNum(chartData.pass[idx] || 0);
     document.getElementById('tt-drop').textContent = fmtNum(chartData.drop[idx] || 0);
     tt.style.opacity = 1;
@@ -1340,8 +1455,9 @@ function drawSparkline(id, data, color){
   ctx.fill();
 }
 
+
 function setDonutSeg(id, pct, offset){
-  var circ = 2 * Math.PI * 48; // ≈ 301.593
+  var circ = 2 * Math.PI * 48; 
   var len = (pct/100) * circ;
   var el = document.getElementById(id);
   if(!el) return;
@@ -1349,31 +1465,40 @@ function setDonutSeg(id, pct, offset){
   el.setAttribute('stroke-dashoffset', -offset);
 }
 function updateProtocolDistribution(d){
+  
+  var p  = d.proto  || {};
+  var eg = d.egress || {};
+  var scope = window.protoScope || 'ingress';
 
-  var passed  = d.passed || 0;
-  var dropped = d.dropped || 0;
-  var ctp     = d.ct_passed || 0;
-  var ctt     = d.ct_tracked || 0;
-  var icmp    = d.icmp_dropped || 0;
-  var total   = passed + dropped;
-
-
-  var stateful = Math.max(ctp, ctt);
-
-  var tcpUdp = Math.max(0, stateful - icmp);
-
-  var tcp = Math.round(tcpUdp * 0.7);
-  var udp = tcpUdp - tcp;
-  var known = tcp + udp + icmp;
-  var other = Math.max(0, total - known);
-
-  var sum = tcp + udp + icmp + other;
-  var pctT=0, pctU=0, pctI=0, pctO=0;
-  if(sum > 0){
-    pctT = (tcp/sum)*100; pctU = (udp/sum)*100;
-    pctI = (icmp/sum)*100; pctO = (other/sum)*100;
+  function get(name, kind){
+    var ing = p[name]  || {pass_pkts:0, drop_pkts:0, pass_bytes:0, drop_bytes:0};
+    var out = eg[name] || {pkts:0, bytes:0, drop_pkts:0, drop_bytes:0};
+    if(scope === 'ingress'){
+      return kind === 'bytes'
+        ? (ing.pass_bytes + ing.drop_bytes)
+        : (ing.pass_pkts  + ing.drop_pkts);
+    }
+    if(scope === 'egress'){
+      return kind === 'bytes' ? ((out.bytes||0) + (out.drop_bytes||0)) : ((out.pkts||0) + (out.drop_pkts||0));
+    }
+    
+    if(kind === 'bytes'){
+      return (ing.pass_bytes + ing.drop_bytes) + (out.bytes || 0) + (out.drop_bytes || 0);
+    }
+    return (ing.pass_pkts + ing.drop_pkts) + (out.pkts || 0) + (out.drop_pkts || 0);
   }
 
+  var tcp   = get('tcp',   'pkts');
+  var udp   = get('udp',   'pkts');
+  var icmp  = get('icmp',  'pkts');
+  var other = get('other', 'pkts');
+  var sum   = tcp + udp + icmp + other;
+
+  var pctT=0, pctU=0, pctI=0, pctO=0;
+  if(sum > 0){
+    pctT = (tcp  /sum)*100; pctU = (udp  /sum)*100;
+    pctI = (icmp /sum)*100; pctO = (other/sum)*100;
+  }
 
   var circ = 2 * Math.PI * 48;
   var off = 0;
@@ -1392,8 +1517,39 @@ function updateProtocolDistribution(d){
   document.getElementById('proto-icmp-count').textContent  = fmtInt(icmp);
   document.getElementById('proto-other-count').textContent = fmtInt(other);
 
-  document.getElementById('donut-big').textContent = fmtNum(total);
-  document.getElementById('proto-total-badge').textContent = fmtInt(total)+' Pakete';
+  
+  function subFor(name){
+    var ing = p[name]  || {pass_pkts:0, drop_pkts:0};
+    var out = eg[name] || {pkts:0, drop_pkts:0};
+    if(scope === 'egress') return fmtInt(out.pkts || 0) + ' '+t('pass')+' · ' + fmtInt(out.drop_pkts || 0) + ' '+t('drop');
+    if(scope === 'ingress')
+      return fmtInt(ing.pass_pkts) + ' '+t('pass')+' · ' + fmtInt(ing.drop_pkts) + ' '+t('drop');
+    
+    return fmtInt((ing.pass_pkts||0) + (out.pkts||0)) + ' '+t('pass')+' · ' + fmtInt((ing.drop_pkts||0) + (out.drop_pkts||0)) + ' '+t('drop');
+  }
+  document.getElementById('proto-tcp-sub').textContent   = subFor('tcp');
+  document.getElementById('proto-udp-sub').textContent   = subFor('udp');
+  document.getElementById('proto-icmp-sub').textContent  = subFor('icmp');
+  document.getElementById('proto-other-sub').textContent = subFor('other');
+
+  document.getElementById('donut-big').textContent = fmtNum(sum);
+  var scopeLabel = scope === 'ingress' ? t('packetsIn')
+                  : scope === 'egress'  ? t('packetsOut')
+                  : t('packetsTotal');
+  document.getElementById('donut-lbl').textContent = scopeLabel.split(' ').slice(1).join(' ') || 'Pakete';
+  document.getElementById('proto-total-badge').textContent = fmtInt(sum) + ' ' + scopeLabel;
+}
+function setProtoScope(s){
+  if(s !== 'ingress' && s !== 'egress' && s !== 'total') return;
+  window.protoScope = s;
+  var seg = document.getElementById('proto-scope-seg');
+  if(seg){
+    var btns = seg.querySelectorAll('.range-btn');
+    for(var i=0;i<btns.length;i++){
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-scope') === s);
+    }
+  }
+  if(window.lastStats) updateProtocolDistribution(window.lastStats);
 }
 function updateDropAnalysis(d){
   var rl = d.rl_dropped || 0;
@@ -1412,7 +1568,7 @@ function updateDropAnalysis(d){
   document.getElementById('ss-ipv6').style.width  = pV6 + '%';
   document.getElementById('ss-other').style.width = pOt + '%';
 
-
+  
   function setLbl(id, pct, text){
     var el = document.getElementById(id);
     el.textContent = pct > 8 ? text : '';
@@ -1442,10 +1598,7 @@ function updateDropAnalysis(d){
 function initChart(){
   fetch(API+'/stats').then(function(r){return r.json()}).then(function(j){
     if(j.history && j.history.length){
-      chartData.pass = j.history.map(function(h){return h.pass_pps||0});
-      chartData.drop = j.history.map(function(h){return h.drop_pps||0});
-      while(chartData.pass.length > CHART_LEN) chartData.pass.shift();
-      while(chartData.drop.length > CHART_LEN) chartData.drop.shift();
+      setChartHistory(j.history);
     }
     drawTrafficChart();
     if(j) updateStats(j);
@@ -1459,12 +1612,14 @@ function connectSSE(){
 function updateStats(d){
   if(d.error) return;
   lastStats = d;
+  hydrateIfaceInput(d);
 
+  
   document.getElementById('hs-total').textContent = fmtNum(d.total_pps || 0);
   document.getElementById('hs-pass').textContent  = fmtNum(d.pass_pps  || 0);
   document.getElementById('hs-drop').textContent  = fmtNum(d.drop_pps  || 0);
 
-
+  
   document.getElementById('m-total').textContent = fmtNum(d.total_pps || 0);
   document.getElementById('m-pass').textContent  = fmtNum(d.pass_pps  || 0);
   document.getElementById('m-drop').textContent  = fmtNum(d.drop_pps  || 0);
@@ -1472,7 +1627,7 @@ function updateStats(d){
   document.getElementById('m-ct').textContent    = fmtInt(d.ct_passed||0);
   if(typeof d.rules !== 'undefined') document.getElementById('m-rules').textContent = d.rules || 0;
 
-
+  
   document.getElementById('s-passed').textContent     = fmtInt(d.passed||0);
   document.getElementById('s-dropped').textContent    = fmtInt(d.dropped||0);
   document.getElementById('s-bl').textContent         = fmtInt(d.bl_dropped||0);
@@ -1482,7 +1637,7 @@ function updateStats(d){
   document.getElementById('s-ipv6').textContent       = fmtInt(d.ipv6_dropped||0);
   document.getElementById('s-egress').textContent     = fmtInt(d.tc_out_blocked||0);
 
-
+  
   var badge=document.getElementById('sbadge'),dot=document.getElementById('sdot'),stxt=document.getElementById('stxt'),iface=document.getElementById('siface'),tcb=document.getElementById('tc-badge'),tct=document.getElementById('tc-txt');
   if(d.loaded){badge.className='sbadge on';dot.className='dot g';stxt.textContent='ONLINE';iface.textContent=d.iface||''}
   else{badge.className='sbadge off';dot.className='dot r';stxt.textContent='OFFLINE';iface.textContent=''}
@@ -1490,12 +1645,12 @@ function updateStats(d){
   else{tcb.style.display=d.loaded?'inline-flex':'none';tcb.className='sbadge off';tct.textContent='CT'}
   if(typeof d.ipv6_allow!=='undefined'){
     document.getElementById('ipv6-toggle').checked = !!d.ipv6_allow;
-    var txt = d.ipv6_allow?'Erlaubt':'Blockiert';
+    var txt = d.ipv6_allow?t('allowed'):t('blocked');
     document.getElementById('ipv6-status-txt').textContent = txt;
     document.getElementById('ipv6-status').textContent = txt;
   }
 
-
+  
   spd.total.shift(); spd.total.push(d.total_pps||0);
   spd.pass.shift();  spd.pass.push(d.pass_pps||0);
   spd.drop.shift();  spd.drop.push(d.drop_pps||0);
@@ -1503,23 +1658,31 @@ function updateStats(d){
 
   pushChart(d.pass_pps||0, d.drop_pps||0);
 
-
+  
+  window.lastStats = d;
   updateProtocolDistribution(d);
   updateDropAnalysis(d);
+  var nowMs = Date.now();
+  var rs = document.getElementById('s-rules');
+  if(rs && rs.style.display !== 'none' && nowMs - lastHitRefresh > 2000){
+    lastHitRefresh = nowMs;
+    refreshRuleHits();
+  }
 
-
+  
   var ifx = d.iface ? d.iface : '—';
-  document.getElementById('hero-sub').textContent = 'Packets per second · '+ifx+' · '+(d.loaded?'XDP aktiv':'offline');
+  document.getElementById('hero-sub').textContent = t('packetsSecond')+' · '+ifx+' · '+(d.loaded?t('xdpActive'):t('offline'));
 }
 
 
 (function(){var tg=document.getElementById('type-toggle');TYPES.forEach(function(t){var b=document.createElement('button');b.className='tb'+(t.key==='filter'?' ac':'');b.setAttribute('data-type',t.key);b.textContent=t.label;b.onclick=function(){setModalType(t.key)};tg.appendChild(b)})})();
 
+var ifaceInput=document.getElementById('iface-in');if(ifaceInput){ifaceInput.addEventListener('input',function(){ifaceTouched=true;});}
 loadRules();
 initChart();
 connectSSE();
 setInterval(loadRules, 5000);
-log('XDP Firewall v5.2 · Pro Dashboard bereit','lok');
+log(t('ready'),'lok');
 
 window.addEventListener('resize', function(){ drawTrafficChart(); redraw(); });
 
