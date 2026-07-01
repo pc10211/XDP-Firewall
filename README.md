@@ -1,4 +1,4 @@
-# 🛡️ XDP-Firewall v2.0
+# 🛡️ XDP-Firewall v2.1
 
 > **eBPF/XDP Firewall**: Ultra-low latency kernel-level packet filtering with stateful connection tracking, advanced rate limiting, and an intuitive web management console.
 
